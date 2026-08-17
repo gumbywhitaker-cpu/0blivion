@@ -1,0 +1,643 @@
+// Kiwi Job Cash — data model
+// SQLite for local/dev by default. Swap `provider`/`DATABASE_URL` to "postgresql" for production —
+// the schema uses only types/features supported by both.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// IDENTITY & TENANCY
+// ────────────────────────────────────────────────────────────────────────────
+
+model User {
+  id              String   @id @default(cuid())
+  name            String
+  email           String   @unique
+  passwordHash    String
+  avatarUrl       String?
+  status          String   @default("ACTIVE") // ACTIVE, SUSPENDED
+  isSuperAdmin    Boolean  @default(false)
+  emailVerifiedAt DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  lastLoginAt     DateTime?
+
+  memberships       BusinessMember[]
+  ownedBusinesses    Business[]        @relation("BusinessOwner")
+  aiActions          AIAction[]
+  aiConversations    AIConversation[]
+  notifications      Notification[]
+  auditLogs          AuditLog[]
+  passwordResets     PasswordResetToken[]
+  emailVerifications EmailVerificationToken[]
+  feedback           Feedback[]
+  npsResponses       NPSResponse[]
+  featureRequests    FeatureRequest[]
+  supportRequests    SupportRequest[]
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model EmailVerificationToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Business {
+  id                  String   @id @default(cuid())
+  ownerUserId         String
+  name                String
+  businessType        String?
+  industry            String?
+  description         String?
+  phone               String?
+  email               String?
+  website             String?
+  address             String?
+  city                String?
+  region              String?
+  country             String   @default("New Zealand")
+  timezone            String   @default("Pacific/Auckland")
+  currency            String   @default("NZD")
+  logoUrl             String?
+  monthlyRevenueRange String?
+  employeeCount       String?
+  averageJobValue     Float?
+  isDemo              Boolean  @default(false)
+  onboardingStep      Int      @default(0)
+  onboardingCompleted Boolean  @default(false)
+  biggestHeadache     String?
+  crmMethod           String?
+  referralCode        String   @unique @default(cuid())
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  owner         User            @relation("BusinessOwner", fields: [ownerUserId], references: [id])
+  members       BusinessMember[]
+  customers     Customer[]
+  leads         Lead[]
+  quotes        Quote[]
+  invoices      Invoice[]
+  payments      Payment[]
+  jobs          Job[]
+  expenses      Expense[]
+  aiActions     AIAction[]
+  aiConversations AIConversation[]
+  notifications Notification[]
+  integrations  Integration[]
+  subscription  Subscription?
+  usageRecords  Usage[]
+  auditLogs     AuditLog[]
+  automationSettings AutomationSettings?
+  events        Event[]
+  feedback      Feedback[]
+  npsResponses  NPSResponse[]
+  featureRequests FeatureRequest[]
+  supportRequests SupportRequest[]
+  referralsGiven  Referral[]     @relation("ReferrerBusiness")
+  referralsReceived Referral[]   @relation("ReferredBusiness")
+
+  @@index([ownerUserId])
+}
+
+model BusinessMember {
+  id         String   @id @default(cuid())
+  businessId String
+  userId     String
+  role       String   @default("OWNER") // OWNER, ADMIN, MANAGER, STAFF, READ_ONLY
+  status     String   @default("ACTIVE") // ACTIVE, INVITED, SUSPENDED
+  createdAt  DateTime @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, userId])
+  @@index([userId])
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// CORE BUSINESS OBJECTS
+// ────────────────────────────────────────────────────────────────────────────
+
+model Customer {
+  id                       String    @id @default(cuid())
+  businessId               String
+  name                     String
+  companyName              String?
+  email                    String?
+  phone                    String?
+  address                  String?
+  city                     String?
+  notes                    String?
+  customerStatus           String    @default("ACTIVE") // ACTIVE, DORMANT, VIP, AT_RISK, ARCHIVED
+  lifetimeValue            Float     @default(0)
+  totalJobs                Int       @default(0)
+  lastJobDate              DateTime?
+  lastContactDate          DateTime?
+  paymentReliabilityScore  Int?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  leads    Lead[]
+  quotes   Quote[]
+  invoices Invoice[]
+  payments Payment[]
+  jobs     Job[]
+  aiActions AIAction[]
+
+  @@index([businessId])
+  @@index([businessId, customerStatus])
+}
+
+model Lead {
+  id               String    @id @default(cuid())
+  businessId       String
+  customerId       String?
+  name             String
+  email            String?
+  phone            String?
+  source           String?
+  description      String?
+  estimatedValue   Float?
+  status           String    @default("NEW") // NEW, CONTACTED, QUALIFIED, QUOTED, WON, LOST, DORMANT
+  priority         String    @default("MEDIUM") // LOW, MEDIUM, HIGH
+  createdAt        DateTime  @default(now())
+  lastContactedAt  DateTime?
+  nextFollowupAt   DateTime?
+  convertedAt      DateTime?
+  lostReason       String?
+
+  business Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id])
+  quotes   Quote[]
+  jobs     Job[]
+  aiActions AIAction[]
+
+  @@index([businessId])
+  @@index([businessId, status])
+}
+
+model Quote {
+  id             String    @id @default(cuid())
+  businessId     String
+  customerId     String
+  leadId         String?
+  quoteNumber    String
+  description    String?
+  amount         Float
+  issueDate      DateTime  @default(now())
+  expiryDate     DateTime?
+  status         String    @default("DRAFT") // DRAFT, SENT, VIEWED, FOLLOW_UP, ACCEPTED, DECLINED, EXPIRED
+  lastFollowupAt DateTime?
+  nextFollowupAt DateTime?
+  acceptedAt     DateTime?
+  declinedAt     DateTime?
+  lostReason     String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  business Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customer Customer  @relation(fields: [customerId], references: [id])
+  lead     Lead?     @relation(fields: [leadId], references: [id])
+  jobs     Job[]
+  aiActions AIAction[]
+
+  @@unique([businessId, quoteNumber])
+  @@index([businessId])
+  @@index([businessId, status])
+}
+
+model Invoice {
+  id             String    @id @default(cuid())
+  businessId     String
+  customerId     String
+  jobId          String?
+  invoiceNumber  String
+  amount         Float
+  issueDate      DateTime  @default(now())
+  dueDate        DateTime
+  paidDate       DateTime?
+  status         String    @default("DRAFT") // DRAFT, SENT, PARTIALLY_PAID, PAID, OVERDUE, BAD_DEBT
+  daysOverdue    Int       @default(0)
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id])
+  job      Job?     @relation(fields: [jobId], references: [id])
+  payments Payment[]
+  aiActions AIAction[]
+
+  @@unique([businessId, invoiceNumber])
+  @@index([businessId])
+  @@index([businessId, status])
+}
+
+model Payment {
+  id          String   @id @default(cuid())
+  businessId  String
+  invoiceId   String
+  customerId  String
+  amount      Float
+  paymentDate DateTime @default(now())
+  method      String?  // CASH, BANK_TRANSFER, CARD, OTHER
+  reference   String?
+  status      String   @default("COMPLETED") // COMPLETED, PENDING, FAILED, REFUNDED
+  createdAt   DateTime @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  invoice  Invoice  @relation(fields: [invoiceId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  @@index([businessId])
+}
+
+model Job {
+  id             String    @id @default(cuid())
+  businessId     String
+  customerId     String
+  leadId         String?
+  quoteId        String?
+  jobNumber      String
+  title          String
+  jobType        String?   // free-text category, e.g. "Repair", "Installation", "Maintenance"
+  description    String?
+  status         String    @default("LEAD") // LEAD, QUOTED, BOOKED, IN_PROGRESS, COMPLETED, INVOICED, PAID, CANCELLED
+  scheduledDate  DateTime?
+  completedDate  DateTime?
+  quotedAmount   Float?
+  actualRevenue  Float?
+  labourCost     Float     @default(0)
+  materialCost   Float     @default(0)
+  otherCost      Float     @default(0)
+  grossProfit    Float?
+  grossMargin    Float?
+  invoiceStatus  String?   // mirrors related Invoice.status when present
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  business Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customer Customer  @relation(fields: [customerId], references: [id])
+  lead     Lead?     @relation(fields: [leadId], references: [id])
+  quote    Quote?    @relation(fields: [quoteId], references: [id])
+  invoices Invoice[]
+  expenses Expense[]
+  aiActions AIAction[]
+
+  @@unique([businessId, jobNumber])
+  @@index([businessId])
+  @@index([businessId, status])
+}
+
+model Expense {
+  id          String   @id @default(cuid())
+  businessId  String
+  category    String
+  description String?
+  amount      Float
+  date        DateTime @default(now())
+  jobId       String?
+  supplier    String?
+  recurring   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  job      Job?     @relation(fields: [jobId], references: [id])
+
+  @@index([businessId])
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// AI LAYER
+// ────────────────────────────────────────────────────────────────────────────
+
+model AIAction {
+  id                  String    @id @default(cuid())
+  businessId          String
+  userId              String?
+  type                String    // LEAD_FOLLOWUP, QUOTE_FOLLOWUP, INVOICE_CHASE, CUSTOMER_REACTIVATION, REVIEW_REQUEST, JOB_REVIEW, PROFIT_ALERT, REVENUE_OPPORTUNITY, GENERAL_TASK
+  entityType          String    // Lead, Quote, Invoice, Customer, Job
+  entityId            String
+  title               String
+  description         String
+  estimatedValue       Float?
+  priority            String    @default("MEDIUM") // LOW, MEDIUM, HIGH
+  status              String    @default("PENDING") // PENDING, APPROVED, SENT, COMPLETED, DISMISSED, FAILED
+  aiReasoningSummary  String?
+  suggestedMessage    String?
+  approvedAt          DateTime?
+  scheduledFor        DateTime?
+  sentAt              DateTime?
+  sendChannel         String?   // EMAIL, SMS, MANUAL
+  deliveryStatus      String?   // DELIVERED, NOT_CONFIGURED, FAILED
+  completedAt         DateTime?
+  resultValue         Float?
+  resultOutcome       String?   // WON, LOST, PARTIAL, NO_RESPONSE
+  createdAt           DateTime  @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user     User?    @relation(fields: [userId], references: [id])
+  customer Customer? @relation(fields: [customerId], references: [id])
+  customerId String?
+  lead     Lead?    @relation(fields: [leadId], references: [id])
+  leadId   String?
+  quote    Quote?   @relation(fields: [quoteId], references: [id])
+  quoteId  String?
+  invoice  Invoice? @relation(fields: [invoiceId], references: [id])
+  invoiceId String?
+  job      Job?     @relation(fields: [jobId], references: [id])
+  jobId    String?
+
+  @@index([businessId])
+  @@index([businessId, status])
+  @@index([businessId, type])
+}
+
+model AIConversation {
+  id          String   @id @default(cuid())
+  businessId  String
+  userId      String
+  title       String
+  contextType String?  // dashboard, lead, quote, invoice, customer, general
+  contextId   String?
+  messages    String   // JSON-encoded array of {role, content, createdAt}
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id])
+
+  @@index([businessId])
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// NOTIFICATIONS / INTEGRATIONS / BILLING
+// ────────────────────────────────────────────────────────────────────────────
+
+model Notification {
+  id         String   @id @default(cuid())
+  businessId String
+  userId     String?
+  type       String   // NEW_LEAD, QUOTE_FOLLOWUP, INVOICE_OVERDUE, MONEY_OPPORTUNITY, DAILY_REPORT, SUBSCRIPTION_ISSUE, INTEGRATION_ERROR
+  title      String
+  message    String
+  priority   String   @default("MEDIUM") // LOW, MEDIUM, HIGH
+  read       Boolean  @default(false)
+  actionUrl  String?
+  createdAt  DateTime @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user     User?    @relation(fields: [userId], references: [id])
+
+  @@index([businessId])
+  @@index([businessId, read])
+}
+
+model Integration {
+  id                String    @id @default(cuid())
+  businessId        String
+  provider          String    // XERO, GOOGLE, GMAIL, TWILIO, STRIPE, ZAPIER, GOOGLE_CALENDAR
+  status            String    @default("NOT_CONNECTED") // NOT_CONNECTED, CONNECTED, ERROR, DISABLED
+  externalAccountId String?
+  metadata          String?   // JSON
+  lastSyncAt        DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, provider])
+  @@index([businessId])
+}
+
+model Subscription {
+  id                   String    @id @default(cuid())
+  businessId           String    @unique
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  plan                 String    @default("FREE") // FREE, SOLO, PRO, CREW
+  status               String    @default("ACTIVE") // ACTIVE, TRIALING, PAST_DUE, CANCELED, INCOMPLETE
+  trialStart           DateTime?
+  trialEnd             DateTime?
+  currentPeriodStart   DateTime?
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean   @default(false)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model Usage {
+  id         String   @id @default(cuid())
+  businessId String
+  month      String   // YYYY-MM
+  aiActions  Int      @default(0)
+  aiMessages Int      @default(0)
+  emailsSent Int      @default(0)
+  smsSent    Int      @default(0)
+  scans      Int      @default(0)
+  apiCalls   Int      @default(0)
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, month])
+}
+
+model AutomationSettings {
+  id                        String  @id @default(cuid())
+  businessId                String  @unique
+  aiRecommendationsEnabled  Boolean @default(true)
+  dailyReportEnabled        Boolean @default(true)
+  dailyReportTime           String  @default("07:00")
+  dailyReportEmail          Boolean @default(true)
+  dailyReportSms            Boolean @default(false)
+  emailFollowupSuggestions  Boolean @default(true)
+  smsFollowupSuggestions    Boolean @default(false)
+  automaticSending          Boolean @default(false)
+  quoteReminderDays1        Int     @default(3)
+  quoteReminderDays2        Int     @default(7)
+  invoiceReminderBeforeDue  Int     @default(1)
+  invoiceReminderDays1      Int     @default(1)
+  invoiceReminderDays2      Int     @default(7)
+  invoiceReminderDays3      Int     @default(14)
+  customerReactivationDays  Int     @default(180)
+  reviewRequestsEnabled     Boolean @default(true)
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  businessId String?
+  userId     String?
+  action     String
+  entityType String?
+  entityId   String?
+  metadata   String?  // JSON
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  business Business? @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user     User?     @relation(fields: [userId], references: [id])
+
+  @@index([businessId])
+  @@index([userId])
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// GROWTH / MARKETING
+// ────────────────────────────────────────────────────────────────────────────
+
+model LeadGenerationScan {
+  id                       String   @id @default(cuid())
+  email                    String?
+  businessName             String?
+  businessType             String?
+  monthlyRevenue           Float?
+  employeeCount            Int?
+  averageJobValue          Float?
+  monthlyEnquiries         Int?
+  monthlyQuotes            Int?
+  overdueInvoiceCount      Int?
+  overdueInvoiceValue      Float?
+  dormantCustomerCount     Int?
+  estimatedLeadLeak        Float?
+  estimatedQuoteLeak       Float?
+  estimatedInvoiceLeak     Float?
+  estimatedDormantLeak     Float?
+  estimatedTotalOpportunity Float?
+  source                   String?
+  campaign                 String?
+  landingPage              String?
+  utmSource                String?
+  utmMedium                String?
+  utmCampaign              String?
+  convertedToSignup        Boolean  @default(false)
+  convertedUserId          String?
+  createdAt                DateTime @default(now())
+}
+
+model Event {
+  id         String   @id @default(cuid())
+  businessId String?
+  userId     String?
+  name       String   // landing_page_view, money_scan_started, signup_completed, ...
+  properties String?  // JSON
+  createdAt  DateTime @default(now())
+
+  business Business? @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@index([name])
+}
+
+model Referral {
+  id                 String    @id @default(cuid())
+  referrerBusinessId String
+  referredBusinessId String?   @unique
+  referredEmail      String?
+  code               String
+  status             String    @default("PENDING") // PENDING, SIGNED_UP, QUALIFIED, CREDITED, EXPIRED
+  referrerCredit     Float     @default(20)
+  referredCredit     Float     @default(20)
+  createdAt          DateTime  @default(now())
+  convertedAt        DateTime?
+
+  referrerBusiness Business  @relation("ReferrerBusiness", fields: [referrerBusinessId], references: [id], onDelete: Cascade)
+  referredBusiness Business? @relation("ReferredBusiness", fields: [referredBusinessId], references: [id])
+
+  @@index([referrerBusinessId])
+}
+
+model Prospect {
+  id                String   @id @default(cuid())
+  businessName      String
+  industry          String?
+  location          String?
+  website           String?
+  contactName       String?
+  contactEmail      String?
+  contactPhone      String?
+  potentialPain     String?
+  estimatedOpportunity Float?
+  status            String   @default("PROSPECT") // PROSPECT, CONTACTED, DEMO, TRIAL, CUSTOMER, LOST
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model FeatureRequest {
+  id         String   @id @default(cuid())
+  businessId String?
+  userId     String?
+  title      String
+  description String?
+  status     String   @default("OPEN") // OPEN, PLANNED, IN_PROGRESS, SHIPPED, DECLINED
+  votes      Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  business Business? @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user     User?     @relation(fields: [userId], references: [id])
+}
+
+model Feedback {
+  id         String   @id @default(cuid())
+  businessId String?
+  userId     String?
+  rating     Int?
+  feedback   String?
+  source     String?
+  createdAt  DateTime @default(now())
+
+  business Business? @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user     User?     @relation(fields: [userId], references: [id])
+}
+
+model NPSResponse {
+  id         String   @id @default(cuid())
+  businessId String
+  userId     String
+  score      Int
+  comment    String?
+  createdAt  DateTime @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id])
+}
+
+model SupportRequest {
+  id         String    @id @default(cuid())
+  businessId String?
+  userId     String?
+  subject    String
+  message    String
+  priority   String    @default("NORMAL") // LOW, NORMAL, HIGH, URGENT
+  status     String    @default("OPEN") // OPEN, IN_PROGRESS, RESOLVED, CLOSED
+  createdAt  DateTime  @default(now())
+  resolvedAt DateTime?
+
+  business Business? @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user     User?     @relation(fields: [userId], references: [id])
+}
