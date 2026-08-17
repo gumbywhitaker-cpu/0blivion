@@ -78,6 +78,10 @@ const STATUS_TONE: Record<string, Tone> = {
   PAST_DUE: "warning",
   CANCELED: "danger",
   INCOMPLETE: "neutral",
+  // support requests
+  OPEN: "warning",
+  RESOLVED: "success",
+  CLOSED: "neutral",
 };
 
 const STATUS_LABEL: Record<string, string> = {

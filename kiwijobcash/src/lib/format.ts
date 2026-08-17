@@ -44,6 +44,10 @@ export function daysBetween(a: Date, b: Date) {
   return Math.round(ms / (1000 * 60 * 60 * 24));
 }
 
+export function daysAgo(n: number) {
+  return new Date(Date.now() - n * 24 * 60 * 60 * 1000);
+}
+
 export function relativeDays(date: Date | string | null | undefined) {
   if (!date) return "—";
   const d = typeof date === "string" ? new Date(date) : date;
