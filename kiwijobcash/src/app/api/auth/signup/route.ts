@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { hashPassword, setSessionCookie } from "@/lib/auth";
-import { sendEmail } from "@/lib/email";
+import { sendEmail, escapeHtml } from "@/lib/email";
 import { trackEvent } from "@/lib/events";
 import { writeAuditLog } from "@/lib/audit";
 
@@ -91,7 +91,7 @@ export async function POST(req: Request) {
   await sendEmail({
     to: result.user.email,
     subject: "Verify your Kiwi Job Cash account",
-    html: `<p>Kia ora ${result.user.name},</p><p>Confirm your email to finish setting up Kiwi Job Cash:</p><p><a href="${verifyUrl}">${verifyUrl}</a></p>`,
+    html: `<p>Kia ora ${escapeHtml(result.user.name)},</p><p>Confirm your email to finish setting up Kiwi Job Cash:</p><p><a href="${verifyUrl}">${verifyUrl}</a></p>`,
   });
 
   return NextResponse.json({

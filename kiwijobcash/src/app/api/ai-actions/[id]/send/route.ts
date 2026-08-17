@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { requireApiBusiness, apiErrorResponse, ApiError } from "@/lib/api-auth";
 import { writeAuditLog } from "@/lib/audit";
 import { trackEvent } from "@/lib/events";
-import { sendEmail } from "@/lib/email";
+import { sendEmail, escapeHtml } from "@/lib/email";
 import { canUseAiAction, incrementUsage } from "@/lib/usage";
 
 const schema = z.object({ message: z.string().min(1).max(4000) });
@@ -48,7 +48,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/ai-actions/[id]
       const result = await sendEmail({
         to: action.customer.email,
         subject: SUBJECTS[action.type] ?? "A message from " + business.name,
-        html: `<p>${escapeHtml(parsed.data.message).replace(/\n/g, "<br/>")}</p><p>— ${business.name}</p>`,
+        html: `<p>${escapeHtml(parsed.data.message).replace(/\n/g, "<br/>")}</p><p>— ${escapeHtml(business.name)}</p>`,
       });
       deliveryStatus = result.delivered ? "DELIVERED" : "NOT_CONFIGURED";
     }
@@ -80,11 +80,4 @@ export async function POST(req: Request, ctx: RouteContext<"/api/ai-actions/[id]
   } catch (err) {
     return apiErrorResponse(err);
   }
-}
-
-function escapeHtml(s: string) {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
 }

@@ -2,6 +2,16 @@ import "server-only";
 
 export type SendEmailResult = { delivered: boolean; reason?: string };
 
+/** Escapes user-controlled text (names, business names, messages) before interpolating into email HTML. */
+export function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 /**
  * Minimal transactional email adapter. Uses Resend's REST API directly (no SDK
  * dependency) when RESEND_API_KEY is configured. Otherwise logs to the server

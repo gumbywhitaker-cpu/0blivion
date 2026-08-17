@@ -4,7 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireApiBusiness, apiErrorResponse } from "@/lib/api-auth";
 import { hashPassword } from "@/lib/auth";
-import { sendEmail } from "@/lib/email";
+import { sendEmail, escapeHtml } from "@/lib/email";
 import { getPlan } from "@/lib/plans";
 import { ALL_ROLES } from "@/lib/permissions";
 import { writeAuditLog } from "@/lib/audit";
@@ -83,7 +83,7 @@ export async function POST(req: Request) {
       await sendEmail({
         to: user.email,
         subject: `You've been added to ${business.name} on Kiwi Job Cash`,
-        html: `<p>${user.name}, you've been added to <strong>${business.name}</strong> on Kiwi Job Cash as ${role.toLowerCase()}.</p>`,
+        html: `<p>${escapeHtml(user.name)}, you've been added to <strong>${escapeHtml(business.name)}</strong> on Kiwi Job Cash as ${role.toLowerCase()}.</p>`,
       });
       return NextResponse.json({ member, invitedNewUser: false });
     }
@@ -113,7 +113,7 @@ export async function POST(req: Request) {
     const result = await sendEmail({
       to: email,
       subject: `You're invited to ${business.name} on Kiwi Job Cash`,
-      html: `<p>You've been invited to join <strong>${business.name}</strong> on Kiwi Job Cash as ${role.toLowerCase()}.</p><p><a href="${setPasswordUrl}">Set your password to get started</a>. This link expires in 7 days.</p>`,
+      html: `<p>You've been invited to join <strong>${escapeHtml(business.name)}</strong> on Kiwi Job Cash as ${role.toLowerCase()}.</p><p><a href="${setPasswordUrl}">Set your password to get started</a>. This link expires in 7 days.</p>`,
     });
 
     if (!result.delivered && process.env.NODE_ENV !== "production") {

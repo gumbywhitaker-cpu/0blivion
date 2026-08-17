@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { requireApiBusiness, apiErrorResponse } from "@/lib/api-auth";
 import { computeDailySummary } from "@/lib/agents/dailyManager";
 import { formatMoney } from "@/lib/format";
-import { sendEmail } from "@/lib/email";
+import { sendEmail, escapeHtml } from "@/lib/email";
 
 /**
  * Generates the Daily Report and creates an in-app notification. Also
@@ -47,7 +47,7 @@ export async function POST() {
     const emailResult = await sendEmail({
       to: user.email,
       subject: `Kiwi Job Cash — ${title}`,
-      html: `<pre style="font-family:inherit;white-space:pre-wrap;">${message.replace(/</g, "&lt;")}</pre>`,
+      html: `<pre style="font-family:inherit;white-space:pre-wrap;">${escapeHtml(message)}</pre>`,
     });
 
     return NextResponse.json({
