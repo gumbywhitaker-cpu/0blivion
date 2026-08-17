@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useSearchParams } from "next/navigation";
-import { PlusCircle, Search, Users } from "lucide-react";
+import { PlusCircle, Search, Users, Upload } from "lucide-react";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/States";
 import { Button } from "@/components/ui/Button";
@@ -70,9 +70,14 @@ export function CustomersListClient({ customers }: { customers: CustomerRow[] })
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <Button onClick={() => setModalOpen(true)} icon={<PlusCircle className="size-4" />}>
-          Add customer
-        </Button>
+        <div className="flex gap-2">
+          <Button href="/app/customers/import" variant="outline" icon={<Upload className="size-4" />}>
+            Import CSV
+          </Button>
+          <Button onClick={() => setModalOpen(true)} icon={<PlusCircle className="size-4" />}>
+            Add customer
+          </Button>
+        </div>
       </div>
 
       {filtered.length === 0 ? (

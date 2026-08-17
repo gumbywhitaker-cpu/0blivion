@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { requireApiBusiness, apiErrorResponse, ApiError } from "@/lib/api-auth";
 import { writeAuditLog } from "@/lib/audit";
 import { trackEvent } from "@/lib/events";
+import { triggerZapierWebhook } from "@/lib/integrations";
 
 const schema = z.object({
   outcome: z.enum(["WON", "LOST", "PARTIAL", "NO_RESPONSE"]),
@@ -53,6 +54,10 @@ export async function POST(req: Request, ctx: RouteContext<"/api/ai-actions/[id]
       await trackEvent("money_recovered", {
         businessId: business.id,
         properties: { amount: resultValue, type: action.type },
+      });
+      await triggerZapierWebhook(business.id, "money_recovered", {
+        amount: resultValue,
+        actionType: action.type,
       });
     }
 
