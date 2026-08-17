@@ -3,18 +3,21 @@ import Link from "next/link";
 import { requireBusiness } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import { getPlan } from "@/lib/plans";
+import { canUseAiAction } from "@/lib/usage";
 import { Sidebar } from "@/components/app/Sidebar";
 import { MobileNav } from "@/components/app/MobileNav";
 import { TopBar } from "@/components/app/TopBar";
+import { UsageBanner } from "@/components/app/UsageBanner";
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const { user, business } = await requireBusiness();
 
-  const [unreadCount, subscription] = await Promise.all([
+  const [unreadCount, subscription, usage] = await Promise.all([
     prisma.notification.count({
       where: { businessId: business.id, read: false },
     }),
     prisma.subscription.findUnique({ where: { businessId: business.id } }),
+    canUseAiAction(business.id),
   ]);
 
   const plan = getPlan(subscription?.plan);
@@ -31,6 +34,14 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
               Create your free account
             </Link>
           </div>
+        )}
+        {!business.isDemo && usage.percentUsed >= 80 && (
+          <UsageBanner
+            used={usage.used}
+            limit={usage.limit}
+            percentUsed={usage.percentUsed}
+            planName={plan.name}
+          />
         )}
         <main className="flex-1 px-4 pb-24 pt-5 sm:px-6 md:pb-8">{children}</main>
       </div>

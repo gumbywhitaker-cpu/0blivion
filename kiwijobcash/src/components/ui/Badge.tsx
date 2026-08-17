@@ -73,6 +73,11 @@ const STATUS_TONE: Record<string, Tone> = {
   APPROVED: "info",
   DISMISSED: "neutral",
   FAILED: "danger",
+  // subscriptions
+  TRIALING: "info",
+  PAST_DUE: "warning",
+  CANCELED: "danger",
+  INCOMPLETE: "neutral",
 };
 
 const STATUS_LABEL: Record<string, string> = {
