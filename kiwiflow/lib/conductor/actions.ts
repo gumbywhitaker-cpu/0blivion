@@ -43,7 +43,19 @@ async function notifyOwners(ctx: ActionContext, params: ActionParams): Promise<v
   await notifyOrgOwners({ organizationId: ctx.organizationId, title, body, urgency });
 }
 
+async function notifyCoolstoreAlert(ctx: ActionContext): Promise<void> {
+  if (ctx.event.type !== "COOLSTORE_TEMP_ALERT") return;
+  const { facilityName, temperatureC } = ctx.event.payload;
+  await notifyOrgOwners({
+    organizationId: ctx.organizationId,
+    title: "Coolstore temperature out of range",
+    body: `${facilityName} logged at ${temperatureC.toFixed(1)}°C, outside the configured safe range. Check the fruit and the unit now.`,
+    urgency: "CRITICAL",
+  });
+}
+
 export const ACTIONS: Record<string, ActionFn> = {
   createInvoiceDraft,
   notifyOwners,
+  notifyCoolstoreAlert,
 };

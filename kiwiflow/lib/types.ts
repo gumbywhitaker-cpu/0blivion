@@ -56,6 +56,30 @@ export type ContractorLinkStatus = (typeof CONTRACTOR_LINK_STATUSES)[number];
 export const ONBOARDING_STATUSES = ["PENDING", "USED", "EXPIRED"] as const;
 export type OnboardingStatus = (typeof ONBOARDING_STATUSES)[number];
 
+export const KIWIFRUIT_VARIETIES = ["HAYWARD", "GOLD3", "OTHER"] as const;
+export type KiwifruitVariety = (typeof KIWIFRUIT_VARIETIES)[number];
+
+/**
+ * Reference harvest-maturity minimums, sourced from NZKGI's published grower
+ * handbook and industry summaries (see docs/BLUEPRINT.md Section 21 for citations).
+ * Zespri sets and can revise the actual clearance thresholds each season via its own
+ * Harvest Standard — KiwiFlow has no live feed to that document, so these are
+ * defaults a grower can override per test, not an authority. Every
+ * HarvestMaturityTest snapshots the threshold it was actually checked against.
+ */
+export const MATURITY_REFERENCE_THRESHOLDS: Record<KiwifruitVariety, { minDryMatterPercent: number; minBrix: number }> = {
+  HAYWARD: { minDryMatterPercent: 15.5, minBrix: 6.2 },
+  GOLD3: { minDryMatterPercent: 16.1, minBrix: 8.0 },
+  OTHER: { minDryMatterPercent: 15, minBrix: 6.2 },
+};
+
+/**
+ * Reference coolstore range for kiwifruit long-term storage (industry sources cite
+ * roughly -1°C to +1°C, 90-95% RH). This is a general packhouse default, not a
+ * per-variety or per-ripeness-stage spec — override per facility as needed.
+ */
+export const COOLSTORE_REFERENCE_RANGE_C = { min: -1, max: 1 };
+
 export type SessionUser = {
   userId: string;
   organizationId: string;

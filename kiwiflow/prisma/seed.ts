@@ -6,23 +6,25 @@ import { hashPassword } from "../lib/auth/password";
  * "job complete -> invoice drafted -> grower notified" actually happen
  * (docs/BLUEPRINT.md Section 6). Without this row the Conductor has nothing to do.
  */
-async function seedWorkflowRules() {
-  const name = "Auto-invoice on job completion";
+async function upsertGlobalRule(name: string, eventType: string, actions: { action: string }[]) {
   const existing = await prisma.workflowRule.findFirst({
-    where: { organizationId: null, eventType: "JOB_COMPLETED", name },
+    where: { organizationId: null, eventType, name },
   });
   if (existing) return;
 
   await prisma.workflowRule.create({
-    data: {
-      organizationId: null,
-      name,
-      eventType: "JOB_COMPLETED",
-      enabled: true,
-      actions: JSON.stringify([{ action: "createInvoiceDraft" }]),
-    },
+    data: { organizationId: null, name, eventType, enabled: true, actions: JSON.stringify(actions) },
   });
-  console.log("Seeded global WorkflowRule: JOB_COMPLETED -> createInvoiceDraft");
+  console.log(`Seeded global WorkflowRule: ${eventType} -> ${actions.map((a) => a.action).join(", ")}`);
+}
+
+async function seedWorkflowRules() {
+  await upsertGlobalRule("Auto-invoice on job completion", "JOB_COMPLETED", [
+    { action: "createInvoiceDraft" },
+  ]);
+  await upsertGlobalRule("Alert on coolstore temperature excursion", "COOLSTORE_TEMP_ALERT", [
+    { action: "notifyCoolstoreAlert" },
+  ]);
 }
 
 /** Demo dataset for local evaluation only — skipped if any organization already exists. */
@@ -129,7 +131,24 @@ async function seedDemoData() {
   const { emitEvent } = await import("../lib/conductor/emit");
   await emitEvent(grower.id, { type: "JOB_COMPLETED", payload: { jobId: doneJob.id } });
 
-  await prisma.job.create({
+  await prisma.harvestMaturityTest.create({
+    data: {
+      orchardId: orchardA.id,
+      jobId: doneJob.id,
+      variety: "HAYWARD",
+      testDate: inDays(-6),
+      sampleSize: 30,
+      dryMatterPercent: 16.4,
+      brix: 6.8,
+      minDryMatterRequired: 15.5,
+      minBrixRequired: 6.2,
+      passed: true,
+      labOrTester: "AsureQuality",
+      recordedById: growerOwner.id,
+    },
+  });
+
+  const sprayJob = await prisma.job.create({
     data: {
       growerOrgId: grower.id,
       contractorOrgId: contractor.id,
@@ -145,6 +164,37 @@ async function seedDemoData() {
       instructions: "Copper spray, whole block. Weather window is tight — go early.",
       createdById: growerOwner.id,
       statusHistory: { create: [{ toStatus: "SCHEDULED", changedById: growerOwner.id }] },
+    },
+  });
+
+  await prisma.sprayDiaryEntry.create({
+    data: {
+      orchardId: orchardB.id,
+      jobId: sprayJob.id,
+      productName: "Nordox 75WG",
+      activeIngredient: "Copper oxide",
+      rateApplied: 2.5,
+      rateUnit: "kg/ha",
+      areaTreatedHa: 6.8,
+      targetPestOrDisease: "Psa",
+      weatherConditions: "Overcast, light wind, no rain forecast 24h",
+      applicationDate: inDays(-2),
+      withholdingPeriodDays: 0,
+      harvestSafeDate: inDays(-2),
+      applicatorId: contractorOwner.id,
+    },
+  });
+
+  await prisma.coolstoreTemperatureLog.create({
+    data: {
+      organizationId: grower.id,
+      facilityName: "Coolstore 1",
+      temperatureC: 0.2,
+      humidityPercent: 92,
+      minRangeC: -1,
+      maxRangeC: 1,
+      withinRange: true,
+      recordedById: growerOwner.id,
     },
   });
 

@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { prisma } from "@/lib/db";
 import { OnboardForm } from "./OnboardForm";
 
@@ -18,6 +19,7 @@ export default async function OnboardPage({
   return (
     <div className="flex flex-1 flex-col items-center justify-center bg-kf-green-900 px-6 py-16 text-white">
       <div className="w-full max-w-sm">
+        <Image src="/brand/kiwiflow-icon.png" alt="" width={44} height={44} className="mb-3" priority />
         <p className="mb-1 text-sm font-medium uppercase tracking-widest text-kf-green-500">
           OneTap onboarding
         </p>

@@ -23,11 +23,25 @@ export default async function InvoiceDetailPage({
   if (!invoice) notFound();
 
   const isIssuer = invoice.fromOrgId === session.organizationId;
+  // IRD's taxable supply information rules: a GST number is required on any invoice
+  // over $200 for it to count as valid GST records (docs/BLUEPRINT.md Section 20).
+  const missingGstNumber = invoice.total > 200 && !invoice.fromOrg.gstNumber;
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6 print:max-w-none">
+      {isIssuer && missingGstNumber ? (
+        <p className="rounded-lg bg-kf-gold/15 px-4 py-3 text-sm text-kf-gold print:hidden">
+          {invoice.fromOrg.name} has no GST number on file. Add one in{" "}
+          <a href="/settings" className="underline">
+            Settings
+          </a>{" "}
+          — invoices over $200 need it to count as valid GST records under IRD rules.
+        </p>
+      ) : null}
+
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-kf-muted">Tax Invoice</p>
           <h1 className="text-2xl font-semibold text-kf-charcoal">{invoice.invoiceNumber}</h1>
           <p className="text-kf-muted">
             Issued {invoice.issuedAt ? invoice.issuedAt.toISOString().slice(0, 10) : "not yet sent"}
@@ -41,10 +55,15 @@ export default async function InvoiceDetailPage({
         <div>
           <p className="text-xs uppercase text-kf-muted">From</p>
           <p className="font-medium text-kf-charcoal">{invoice.fromOrg.name}</p>
+          {invoice.fromOrg.gstNumber ? (
+            <p className="text-sm text-kf-charcoal">GST {invoice.fromOrg.gstNumber}</p>
+          ) : null}
+          {invoice.fromOrg.address ? <p className="text-sm text-kf-muted">{invoice.fromOrg.address}</p> : null}
         </div>
         <div>
           <p className="text-xs uppercase text-kf-muted">To</p>
           <p className="font-medium text-kf-charcoal">{invoice.toOrg.name}</p>
+          {invoice.toOrg.address ? <p className="text-sm text-kf-muted">{invoice.toOrg.address}</p> : null}
         </div>
       </div>
 

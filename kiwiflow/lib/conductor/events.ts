@@ -14,6 +14,7 @@ export type ConductorEvent =
       payload: { contractorOrgId: string; growerOrgId: string };
     }
   | { type: "INVOICE_CREATED"; payload: { invoiceId: string } }
-  | { type: "INVOICE_SENT"; payload: { invoiceId: string } };
+  | { type: "INVOICE_SENT"; payload: { invoiceId: string } }
+  | { type: "COOLSTORE_TEMP_ALERT"; payload: { logId: string; organizationId: string; facilityName: string; temperatureC: number } };
 
 export type ConductorEventType = ConductorEvent["type"];

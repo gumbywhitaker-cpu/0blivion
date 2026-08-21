@@ -23,24 +23,33 @@ model Organization {
   name      String
   type      String // GROWER | CONTRACTOR | TRANSPORT | PACKHOUSE | ACCOUNTANT | ADMIN
   region    String?
+  // Taxable Supply Information fields (docs/BLUEPRINT.md Section 20): IRD requires
+  // the supplier's GST number on any invoice over $200, and address/phone/email/NZBN
+  // is one acceptable way to identify the buyer on invoices over $1,000. Both nullable
+  // because a brand-new org hasn't filled them in yet — the invoice UI warns instead
+  // of silently producing a non-compliant document.
+  gstNumber String?
+  address   String?
+  phone     String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users             User[]
-  orchards          Orchard[]
-  crews             Crew[]
-  jobsAsGrower      Job[]              @relation("GrowerJobs")
-  jobsAsContractor  Job[]              @relation("ContractorJobs")
-  invoicesIssued    Invoice[]          @relation("InvoiceFrom")
-  invoicesReceived  Invoice[]          @relation("InvoiceTo")
-  notifications     Notification[]
-  events            Event[]
-  workflowRules     WorkflowRule[]
-  onboardingInvites OnboardingInvite[]
-  documents         Document[]
-  auditLogs         AuditLog[]
-  linksAsGrower     ContractorLink[]   @relation("GrowerLinks")
-  linksAsContractor ContractorLink[]   @relation("ContractorLinks")
+  users                    User[]
+  orchards                 Orchard[]
+  crews                    Crew[]
+  jobsAsGrower             Job[]                     @relation("GrowerJobs")
+  jobsAsContractor         Job[]                     @relation("ContractorJobs")
+  invoicesIssued           Invoice[]                 @relation("InvoiceFrom")
+  invoicesReceived         Invoice[]                 @relation("InvoiceTo")
+  notifications            Notification[]
+  events                   Event[]
+  workflowRules            WorkflowRule[]
+  onboardingInvites        OnboardingInvite[]
+  documents                Document[]
+  auditLogs                AuditLog[]
+  linksAsGrower            ContractorLink[]          @relation("GrowerLinks")
+  linksAsContractor        ContractorLink[]          @relation("ContractorLinks")
+  coolstoreTemperatureLogs CoolstoreTemperatureLog[]
 
   @@index([type])
 }
@@ -57,11 +66,14 @@ model User {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
-  jobsCreated    Job[]              @relation("JobCreatedBy")
-  statusChanges  JobStatusHistory[] @relation("StatusChangedBy")
-  notifications  Notification[]
-  auditLogs      AuditLog[]
-  crewMemberLink CrewMember?
+  jobsCreated           Job[]                     @relation("JobCreatedBy")
+  statusChanges         JobStatusHistory[]        @relation("StatusChangedBy")
+  notifications         Notification[]
+  auditLogs             AuditLog[]
+  crewMemberLink        CrewMember?
+  maturityTestsRecorded HarvestMaturityTest[]     @relation("MaturityTestRecordedBy")
+  sprayEntriesRecorded  SprayDiaryEntry[]         @relation("SprayEntryApplicator")
+  coolstoreLogsRecorded CoolstoreTemperatureLog[] @relation("CoolstoreLogRecordedBy")
 
   @@index([organizationId])
 }
@@ -82,7 +94,9 @@ model Orchard {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
-  jobs Job[]
+  jobs          Job[]
+  maturityTests HarvestMaturityTest[]
+  sprayEntries  SprayDiaryEntry[]
 
   @@index([organizationId])
 }
@@ -164,6 +178,8 @@ model Job {
   statusHistory JobStatusHistory[]
   invoiceItems  InvoiceItem[]
   notifications Notification[]
+  maturityTests HarvestMaturityTest[]
+  sprayEntries  SprayDiaryEntry[]
 
   @@index([growerOrgId])
   @@index([contractorOrgId])
@@ -185,6 +201,84 @@ model JobStatusHistory {
   changedAt   DateTime @default(now())
 
   @@index([jobId])
+}
+
+// ---------------------------------------------------------------------------
+// Compliance & Quality Records — replaces paper harvest/spray/coolstore logs.
+// See docs/BLUEPRINT.md Section 21 for sourcing: thresholds captured here are
+// reference defaults from public NZKGI/Zespri material, snapshotted onto each
+// record for audit purposes because the industry adjusts them season to season —
+// they are NOT re-derived from a live Zespri feed (no such integration exists).
+// ---------------------------------------------------------------------------
+
+model HarvestMaturityTest {
+  id                   String   @id @default(cuid())
+  orchardId            String
+  orchard              Orchard  @relation(fields: [orchardId], references: [id], onDelete: Cascade)
+  jobId                String?
+  job                  Job?     @relation(fields: [jobId], references: [id])
+  variety              String // HAYWARD | GOLD3 | OTHER
+  testDate             DateTime
+  sampleSize           Int?
+  dryMatterPercent     Float?
+  brix                 Float // soluble solids concentration, °Brix
+  minDryMatterRequired Float? // threshold snapshotted at test time, see header note
+  minBrixRequired      Float?
+  passed               Boolean
+  labOrTester          String? // independent lab name, or "in-house" if self-tested
+  notes                String?
+  recordedById         String
+  recordedBy           User     @relation("MaturityTestRecordedBy", fields: [recordedById], references: [id])
+  createdAt            DateTime @default(now())
+
+  @@index([orchardId])
+  @@index([jobId])
+}
+
+model SprayDiaryEntry {
+  id                    String    @id @default(cuid())
+  orchardId             String
+  orchard               Orchard   @relation(fields: [orchardId], references: [id], onDelete: Cascade)
+  jobId                 String?
+  job                   Job?      @relation(fields: [jobId], references: [id])
+  productName           String
+  activeIngredient      String?
+  hsrNumber             String? // Hazardous Substance Reference number — required for highly ecotoxic compounds
+  rateApplied           Float
+  rateUnit              String // e.g. "L/ha", "kg/ha"
+  areaTreatedHa         Float?
+  targetPestOrDisease   String?
+  weatherConditions     String?
+  applicationDate       DateTime
+  withholdingPeriodDays Int? // pre-harvest interval
+  harvestSafeDate       DateTime? // applicationDate + withholdingPeriodDays, precomputed for quick display
+  applicatorId          String
+  applicator            User      @relation("SprayEntryApplicator", fields: [applicatorId], references: [id])
+  notes                 String?
+  createdAt             DateTime  @default(now())
+
+  @@index([orchardId])
+  @@index([jobId])
+  @@index([applicationDate])
+}
+
+model CoolstoreTemperatureLog {
+  id              String       @id @default(cuid())
+  organizationId  String // PACKHOUSE or GROWER org running the coolstore
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  facilityName    String // e.g. "Coolstore 2" or a room/bay label
+  loggedAt        DateTime     @default(now())
+  temperatureC    Float
+  humidityPercent Float?
+  minRangeC       Float? // range snapshotted at log time, see header note
+  maxRangeC       Float?
+  withinRange     Boolean
+  recordedById    String
+  recordedBy      User         @relation("CoolstoreLogRecordedBy", fields: [recordedById], references: [id])
+  notes           String?
+
+  @@index([organizationId])
+  @@index([loggedAt])
 }
 
 // ---------------------------------------------------------------------------

@@ -4,6 +4,8 @@ import { requireSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { JobStatusBadge, PriorityBadge } from "@/lib/ui/badges";
 import { JobActions } from "./JobActions";
+import { MaturityTestForm } from "./MaturityTestForm";
+import { SprayDiaryForm } from "./SprayDiaryForm";
 import type { JobStatus } from "@/lib/types";
 
 export default async function JobDetailPage({
@@ -26,6 +28,8 @@ export default async function JobDetailPage({
       crew: true,
       statusHistory: { orderBy: { changedAt: "asc" }, include: { changedBy: true } },
       invoiceItems: { include: { invoice: true } },
+      maturityTests: { orderBy: { testDate: "desc" }, include: { recordedBy: true } },
+      sprayEntries: { orderBy: { applicationDate: "desc" }, include: { applicator: true } },
     },
   });
   if (!job) notFound();
@@ -114,6 +118,57 @@ export default async function JobDetailPage({
           contractors={contractors}
         />
       )}
+
+      {job.jobType === "HARVEST" ? (
+        <section className="flex flex-col gap-3">
+          <h2 className="text-lg font-semibold text-kf-charcoal">Maturity testing</h2>
+          <MaturityTestForm jobId={job.id} orchardId={job.orchardId} />
+          {job.maturityTests.length > 0 ? (
+            <ul className="flex flex-col gap-2">
+              {job.maturityTests.map((t) => (
+                <li
+                  key={t.id}
+                  className={`rounded-lg border p-3 text-sm ${
+                    t.passed ? "border-kf-green-500 bg-kf-green-100" : "border-kf-red bg-kf-red/5"
+                  }`}
+                >
+                  <span className="font-semibold text-kf-charcoal">{t.passed ? "PASS" : "FAIL"}</span>{" "}
+                  {t.variety} · {t.brix.toFixed(1)}°Bx
+                  {t.dryMatterPercent ? ` · ${t.dryMatterPercent.toFixed(1)}% DM` : ""}
+                  {" "}(min {t.minBrixRequired?.toFixed(1)}°Bx
+                  {t.minDryMatterRequired ? ` / ${t.minDryMatterRequired.toFixed(1)}% DM` : ""}) ·{" "}
+                  {t.testDate.toISOString().slice(0, 10)} · {t.recordedBy.name}
+                  {t.labOrTester ? ` · ${t.labOrTester}` : ""}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </section>
+      ) : null}
+
+      {job.jobType === "SPRAY" ? (
+        <section className="flex flex-col gap-3">
+          <h2 className="text-lg font-semibold text-kf-charcoal">Spray diary</h2>
+          <SprayDiaryForm jobId={job.id} orchardId={job.orchardId} />
+          {job.sprayEntries.length > 0 ? (
+            <ul className="flex flex-col gap-2">
+              {job.sprayEntries.map((s) => (
+                <li key={s.id} className="rounded-lg border border-kf-border bg-kf-card p-3 text-sm">
+                  <span className="font-semibold text-kf-charcoal">{s.productName}</span>{" "}
+                  {s.rateApplied} {s.rateUnit}
+                  {s.areaTreatedHa ? ` over ${s.areaTreatedHa} ha` : ""} ·{" "}
+                  {s.applicationDate.toISOString().slice(0, 10)}
+                  {s.harvestSafeDate ? (
+                    <> · safe to harvest from {s.harvestSafeDate.toISOString().slice(0, 10)}</>
+                  ) : null}{" "}
+                  · applied by {s.applicator.name}
+                  {s.hsrNumber ? ` · HSR ${s.hsrNumber}` : ""}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </section>
+      ) : null}
 
       <section>
         <h2 className="mb-3 text-lg font-semibold text-kf-charcoal">History</h2>

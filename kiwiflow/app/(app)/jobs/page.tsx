@@ -29,7 +29,19 @@ export default async function JobsPage() {
             href="/api/v1/export/jobs.csv"
             className="btn rounded-md border border-kf-border px-4 py-2 text-sm font-medium text-kf-charcoal hover:border-kf-green-500"
           >
-            Export CSV
+            Export jobs CSV
+          </a>
+          <a
+            href="/api/v1/export/spray-diary.csv"
+            className="btn rounded-md border border-kf-border px-4 py-2 text-sm font-medium text-kf-charcoal hover:border-kf-green-500"
+          >
+            Export spray diary
+          </a>
+          <a
+            href="/api/v1/export/maturity-tests.csv"
+            className="btn rounded-md border border-kf-border px-4 py-2 text-sm font-medium text-kf-charcoal hover:border-kf-green-500"
+          >
+            Export maturity tests
           </a>
           {session.orgType === "GROWER" ? (
             <Link

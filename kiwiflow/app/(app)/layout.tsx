@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import type { ReactNode } from "react";
 import { requireSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
@@ -8,6 +9,7 @@ function navForOrgType(orgType: string): { href: string; label: string }[] {
   const common = [
     { href: "/jobs", label: "Jobs" },
     { href: "/invoices", label: "Invoices" },
+    { href: "/settings", label: "Settings" },
   ];
   if (orgType === "GROWER") {
     return [
@@ -15,6 +17,7 @@ function navForOrgType(orgType: string): { href: string; label: string }[] {
       { href: "/orchards", label: "Orchards" },
       { href: "/contractors", label: "Contractors" },
       ...common,
+      { href: "/coolstore", label: "Coolstore" },
     ];
   }
   if (orgType === "CONTRACTOR") {
@@ -23,6 +26,9 @@ function navForOrgType(orgType: string): { href: string; label: string }[] {
       { href: "/crews", label: "Crews" },
       ...common,
     ];
+  }
+  if (orgType === "PACKHOUSE") {
+    return [{ href: "/coolstore", label: "Coolstore" }, ...common];
   }
   return [{ href: "/dashboard", label: "Dashboard" }, ...common];
 }
@@ -38,7 +44,8 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     <div className="flex min-h-screen flex-col bg-background">
       <header className="border-b border-kf-border bg-kf-green-900 text-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
-          <Link href="/dashboard" className="text-lg font-semibold tracking-tight">
+          <Link href="/dashboard" className="flex shrink-0 items-center gap-2 text-lg font-semibold tracking-tight">
+            <Image src="/brand/kiwiflow-icon.png" alt="" width={28} height={28} priority />
             KiwiFlow
           </Link>
           <nav className="flex flex-1 items-center gap-1 overflow-x-auto">

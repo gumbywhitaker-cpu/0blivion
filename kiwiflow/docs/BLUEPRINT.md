@@ -303,3 +303,82 @@ Postgres instance; local dev uses SQLite via the same Prisma schema (provider sw
 one line in `schema.prisma` + env var). Scaling: stateless app tier behind the DB from
 day one; first real bottleneck at scale will be the Conductor running synchronously —
 that's the trigger to move it to a queue, not before.
+
+## 20. Tax invoice compliance (Taxable Supply Information)
+
+New Zealand replaced the "tax invoice" rule with broader "taxable supply information"
+(TSI) requirements on 1 April 2023 — a supplier GST number is required for records
+over $200, and the buyer needs one identifying detail (address/phone/email/trading
+name/NZBN/URL) for records over $1,000 (IRD, via search-result summary of IRD-derived
+guidance — see Section 21 for the research-provenance caveat that applies here too).
+`Organization` now carries `gstNumber`/`address`/`phone`, editable at `/settings`. The
+invoice page shows both orgs' GST number/address and warns the issuer inline if their
+GST number is missing on an invoice over $200, rather than silently producing a
+document that wouldn't hold up as a GST record.
+
+## 21. Paperless industry records — what's digitized, what isn't, and where the
+    numbers came from
+
+The brief asked to find and digitize the paperwork the NZ kiwifruit industry actually
+uses, including Brix/maturity testing and pack house temperature control, researched
+rather than guessed. Here's what that turned into, and — as important — what it didn't.
+
+**Researched and implemented**, sourced from the public documents cited below (WebSearch
+results captured in this session; no scraped PDF content was available — the two
+primary-source PDFs, NZKGI's grower handbook chapter and Zespri's contractor
+agrichemical checklist, sit behind a domain the sandbox's egress proxy blocks, so the
+figures below come from search-result summaries of those documents, not a direct read
+— treat the specific numbers as a well-sourced starting point to verify against the
+current-season Zespri Harvest Standard before relying on them commercially, not as a
+guarantee):
+
+- **Harvest maturity testing** (`HarvestMaturityTest`): records Brix (soluble solids,
+  °Brix) and dry matter % per test, checked against a **reference** minimum threshold
+  per variety (Hayward ≈15.5% DM / ≥6.2°Brix, Gold3 ≈16.1% DM / ≥8.0°Brix — NZKGI grower
+  handbook Chapter 6, via search-result summary). Zespri sets and revises the actual
+  clearance thresholds each season through its own Harvest Standard; KiwiFlow has no
+  live feed to that document. Every test **snapshots** the threshold it was actually
+  checked against (`minBrixRequired`/`minDryMatterRequired` columns) precisely so a
+  past record stays accurate even after next season's numbers change — the reference
+  constants in `lib/types.ts` are a sensible default, not an authority, and are called
+  out as such in the UI.
+- **Spray diary / crop protection record** (`SprayDiaryEntry`): product, active
+  ingredient, HSR number (for highly ecotoxic compounds), rate, area treated, target,
+  weather, application date, withholding period, and a computed harvest-safe date —
+  the field set the Zespri Spray Diary and NZS 8409:2021 (Management of Agrichemicals)
+  are described as requiring, applications logged within 7 days, records retained 3
+  years. CSV export exists specifically so this can be handed to an auditor or
+  regional council without asking them to learn KiwiFlow.
+- **Coolstore temperature log** (`CoolstoreTemperatureLog`): manual reading entry
+  against a reference safe range (-1°C to +1°C, ~90-95% RH is the commonly cited
+  storage range for kiwifruit) with a Conductor rule (`COOLSTORE_TEMP_ALERT` →
+  `notifyCoolstoreAlert`, CRITICAL urgency) firing the moment a reading falls outside
+  it — the concrete version of the spec's "waiting-time engine" exception pattern,
+  built against something KiwiFlow can actually verify instead of a fabricated
+  number. **No device integration**: readings are typed in. A real coolstore would
+  have logging hardware; that's an `IntegrationAdapter` for a later phase, not invented
+  here.
+- **Tax invoice compliance** (`Organization.gstNumber/address/phone`, invoice page):
+  New Zealand replaced the "tax invoice" rule with broader "taxable supply
+  information" requirements on 1 April 2023 — a GST number is required for records
+  over $200, and the buyer needs one identifying detail (address/phone/email/trading
+  name/NZBN/URL) for records over $1,000 (IRD, via search-result summary of
+  IRD-derived guidance). The invoice page now shows both orgs' GST number/address and
+  warns the issuer inline if their GST number is missing on an invoice over $200,
+  rather than silently producing a document that wouldn't hold up as a GST record.
+
+**Explicitly not attempted**, so this isn't oversold as "the industry's paperwork,
+digitized": NZGAP and GLOBALG.A.P certification audit checklists (these are structured,
+versioned audit instruments tied to a certification body, not a form KiwiFlow can
+safely reproduce without that body's involvement), KVH Psa surveillance/biosecurity
+declaration forms, MPI phytosanitary export certificates, and the full Zespri Orchard
+Gate Price statement (grower payment structure spans fruit loss, post-harvest costs,
+Class 2 income, pool rates, and loyalty/share mechanics that are Zespri's own
+calculation, not KiwiFlow's to restate). Each is a legitimate future scope item; none
+of them were guessed at here.
+
+**On "everything perfect, nothing missed"**: that standard isn't achievable honestly
+for a domain this broad in one pass, and claiming it would be the same mistake as the
+original "Recovered Revenue" metric — a number that looks authoritative and isn't. What
+above is real: sourced, cited, snapshotted for audit trail, and clearly marked where
+it's a configurable default rather than a live regulatory feed.
