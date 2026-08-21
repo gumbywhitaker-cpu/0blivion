@@ -123,6 +123,7 @@ export default async function JobDetailPage({
             growerOrgId: job.growerOrgId,
             contractorOrgId: job.contractorOrgId,
             unit: job.unit,
+            label: `${job.jobType} — ${job.orchard.name}`,
           }}
           session={session}
           contractors={contractors}

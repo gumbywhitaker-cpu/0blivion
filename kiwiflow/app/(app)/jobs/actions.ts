@@ -5,12 +5,12 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/auth/session";
-import { assertCanManage, canManage } from "@/lib/auth/requireRole";
+import { assertCanManage } from "@/lib/auth/requireRole";
 import { emitEvent } from "@/lib/conductor/emit";
 import { notifyOrg } from "@/lib/notify";
 import { recordAuditLog } from "@/lib/audit";
-import { JOB_STATUS_TRANSITIONS, JOB_TYPES, JOB_PRIORITIES, type JobStatus } from "@/lib/types";
-import type { SessionUser } from "@/lib/types";
+import { applyJobTransition } from "@/lib/jobTransition";
+import { JOB_TYPES, JOB_PRIORITIES, type JobStatus } from "@/lib/types";
 
 export type FormState = { error?: string } | undefined;
 
@@ -105,25 +105,6 @@ export async function createJobAction(_prev: FormState, formData: FormData): Pro
   redirect(`/jobs/${job.id}`);
 }
 
-function canTransition(session: SessionUser, job: { growerOrgId: string; contractorOrgId: string | null }, toStatus: JobStatus): boolean {
-  if (toStatus === "SCHEDULED") {
-    return session.organizationId === job.growerOrgId && canManage(session.role) && !!job.contractorOrgId;
-  }
-  if (toStatus === "CONFIRMED") {
-    return session.organizationId === job.contractorOrgId && canManage(session.role);
-  }
-  if (toStatus === "IN_PROGRESS" || toStatus === "COMPLETE") {
-    return session.organizationId === job.contractorOrgId;
-  }
-  if (toStatus === "CANCELLED") {
-    return (
-      (session.organizationId === job.growerOrgId || session.organizationId === job.contractorOrgId) &&
-      canManage(session.role)
-    );
-  }
-  return false; // INVOICED is system-only, driven by the Conductor
-}
-
 const assignContractorSchema = z.object({
   jobId: z.string().min(1),
   contractorOrgId: z.string().min(1, "Choose a contractor"),
@@ -181,78 +162,15 @@ export async function transitionJobAction(_prev: FormState, formData: FormData):
   }
   const { jobId, toStatus, quantity, note } = parsed.data;
 
-  const job = await prisma.job.findFirst({
-    where: {
-      id: jobId,
-      OR: [{ growerOrgId: session.organizationId }, { contractorOrgId: session.organizationId }],
-    },
+  const outcome = await applyJobTransition(session, {
+    jobId,
+    toStatus,
+    quantity: quantity ? Number.parseFloat(quantity) : undefined,
+    note,
   });
-  if (!job) return { error: "Job not found" };
+  if (!outcome.ok) return { error: outcome.error };
 
-  const fromStatus = job.status as JobStatus;
-  const target = toStatus as JobStatus;
-
-  if (!JOB_STATUS_TRANSITIONS[fromStatus]?.includes(target)) {
-    return { error: `Cannot move a job from ${fromStatus} to ${target}` };
-  }
-  if (!canTransition(session, job, target)) {
-    return { error: "You don't have permission to make that change" };
-  }
-
-  let quantityValue: number | undefined;
-  if (target === "COMPLETE") {
-    quantityValue = quantity ? Number.parseFloat(quantity) : NaN;
-    if (!Number.isFinite(quantityValue) || quantityValue! <= 0) {
-      return { error: "Enter the completed quantity to mark this job done" };
-    }
-  }
-
-  await prisma.$transaction(async (tx) => {
-    await tx.job.update({
-      where: { id: job.id },
-      data: {
-        status: target,
-        ...(quantityValue !== undefined ? { quantity: quantityValue } : {}),
-      },
-    });
-    await tx.jobStatusHistory.create({
-      data: {
-        jobId: job.id,
-        fromStatus,
-        toStatus: target,
-        changedById: session.userId,
-        note: note || null,
-      },
-    });
-  });
-
-  await emitEvent(job.growerOrgId, {
-    type: "JOB_STATUS_CHANGED",
-    payload: { jobId: job.id, fromStatus, toStatus: target },
-  });
-  if (target === "COMPLETE") {
-    await emitEvent(job.growerOrgId, { type: "JOB_COMPLETED", payload: { jobId: job.id } });
-  }
-
-  // Logistics Bridge: the destination pack house has no other way to learn a
-  // delivery is now on the road or has arrived — it isn't the grower or the
-  // contractor org on this job, so the Conductor's own-org rule engine can't
-  // reach it. A direct notify here, not a WorkflowRule, matches how
-  // notifyMaterialOrderUpdate handles the same kind of narrow cross-org case.
-  if (job.jobType === "TRANSPORT" && job.destinationOrgId && (target === "IN_PROGRESS" || target === "COMPLETE")) {
-    await notifyOrg({
-      organizationId: job.destinationOrgId,
-      title: target === "IN_PROGRESS" ? "Delivery on its way" : "Delivery arrived",
-      body:
-        target === "IN_PROGRESS"
-          ? `${job.loadDescription ?? "A load"} is now in transit${job.etaAt ? `, ETA ${job.etaAt.toISOString().slice(0, 16).replace("T", " ")}` : ""}.`
-          : `${job.loadDescription ?? "A load"} has arrived.`,
-      urgency: "NORMAL",
-      jobId: job.id,
-    });
-  }
-
-  revalidatePath(`/jobs/${job.id}`);
+  revalidatePath(`/jobs/${jobId}`);
 }
 
 const assignDriverSchema = z.object({

@@ -7,6 +7,7 @@ import {
   type FormState,
 } from "../actions";
 import { canManage } from "@/lib/auth/requireRole";
+import { OfflineStartButton, OfflineCompleteForm } from "./OfflineJobActions";
 import type { JobStatus, OrgType, UserRole } from "@/lib/types";
 
 type Option = { id: string; name: string };
@@ -84,38 +85,6 @@ function TransitionButton({
   );
 }
 
-function CompleteJobForm({ jobId, unit }: { jobId: string; unit: string | null }) {
-  const [state, action, pending] = useActionState<FormState, FormData>(transitionJobAction, undefined);
-  return (
-    <form action={action} className="flex flex-col gap-2 rounded-lg border border-kf-border bg-kf-card p-4">
-      <input type="hidden" name="jobId" value={jobId} />
-      <input type="hidden" name="toStatus" value="COMPLETE" />
-      <label htmlFor="quantity" className="text-sm font-medium text-kf-charcoal">
-        Quantity completed{unit ? ` (${unit})` : ""}
-      </label>
-      <div className="flex flex-wrap gap-2">
-        <input
-          id="quantity"
-          name="quantity"
-          type="number"
-          step="0.01"
-          min="0"
-          required
-          className="w-32 rounded-md border border-kf-border bg-white px-3 py-3 text-lg outline-none focus:border-kf-green-600"
-        />
-        <button
-          type="submit"
-          disabled={pending}
-          className="btn rounded-md bg-kf-green-600 px-6 py-3 text-base font-semibold text-white hover:bg-kf-green-700 disabled:opacity-60"
-        >
-          {pending ? "Finishing…" : "Mark complete"}
-        </button>
-      </div>
-      <ErrorText state={state} />
-    </form>
-  );
-}
-
 function CancelForm({ jobId }: { jobId: string }) {
   const [state, action, pending] = useActionState<FormState, FormData>(transitionJobAction, undefined);
   return (
@@ -139,7 +108,7 @@ export function JobActions({
   session,
   contractors,
 }: {
-  job: { id: string; status: JobStatus; growerOrgId: string; contractorOrgId: string | null; unit: string | null };
+  job: { id: string; status: JobStatus; growerOrgId: string; contractorOrgId: string | null; unit: string | null; label: string };
   session: { organizationId: string; orgType: OrgType; role: UserRole };
   contractors: Option[];
 }) {
@@ -156,10 +125,14 @@ export function JobActions({
     buttons.push(<TransitionButton key="confirm" jobId={job.id} toStatus="CONFIRMED" label="Confirm job" />);
   }
   if (job.status === "CONFIRMED" && isContractor) {
-    buttons.push(<TransitionButton key="start" jobId={job.id} toStatus="IN_PROGRESS" label="Start job" />);
+    // Offline-capable: this is the exact "crew in the orchard with no
+    // signal" moment (docs/BLUEPRINT.md offline sync note). Grower-side
+    // actions above (assign, confirm) stay on the plain Server Action —
+    // those happen at a desk with a connection.
+    buttons.push(<OfflineStartButton key="start" jobId={job.id} jobLabel={job.label} />);
   }
   if (job.status === "IN_PROGRESS" && isContractor) {
-    buttons.push(<CompleteJobForm key="complete" jobId={job.id} unit={job.unit} />);
+    buttons.push(<OfflineCompleteForm key="complete" jobId={job.id} jobLabel={job.label} unit={job.unit} />);
   }
   if (["NEW", "SCHEDULED", "CONFIRMED", "IN_PROGRESS"].includes(job.status) && (isGrower || isContractor) && manages) {
     buttons.push(<CancelForm key="cancel" jobId={job.id} />);

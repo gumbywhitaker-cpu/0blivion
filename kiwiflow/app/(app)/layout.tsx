@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { requireSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { logoutAction } from "../(auth)/actions";
+import { OfflineIndicator } from "@/lib/offline/OfflineIndicator";
 
 function navForSession(orgType: string, role: string): { href: string; label: string }[] {
   // Role checked first: a DRIVER's nav is the same regardless of whether
@@ -94,6 +95,9 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           </div>
         </div>
       </header>
+      {/* Offline job-status sync only matters for the roles that actually
+          work disconnected in the field — invisible to everyone else. */}
+      {session.orgType === "CONTRACTOR" || session.role === "DRIVER" ? <OfflineIndicator /> : null}
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">{children}</main>
     </div>
   );
