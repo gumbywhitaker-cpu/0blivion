@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<title>ENERGY CORE</title>
+<meta name="description" content="A procedurally generated 3D energy core rendered in real time with Three.js." />
+<meta name="theme-color" content="#000000" />
+<link rel="icon" href="data:," />
+<link rel="stylesheet" href="style.css" />
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <main class="hud" aria-hidden="true">
+    <div class="hud-bottom">
+      <div class="hud-label">ENERGY CORE</div>
+      <div class="hud-status"><span class="hud-dot"></span>ONLINE</div>
+    </div>
+    <div class="hud-hint">Move to interact</div>
+  </main>
+
+  <div class="boot" id="boot"></div>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>
