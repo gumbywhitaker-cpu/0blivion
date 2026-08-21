@@ -17,7 +17,10 @@ compliant" or "ISO 27001 certified" anywhere (marketing copy, sales
 conversations, RFP responses) on the strength of this document alone.
 
 What follows is the honest, current state of the technical controls that any
-such audit would eventually check.
+such audit would eventually check. For how these same controls map onto the
+NIST Cybersecurity Framework (a self-assessed framework, not a certification
+— there is nothing to be "NIST certified" in), see
+`docs/NIST-CSF-MAPPING.md`.
 
 ## Authentication & session management
 
@@ -63,10 +66,11 @@ such audit would eventually check.
 
 - `lib/audit.ts` writes to the `AuditLog` table (organization-scoped actor,
   action, entity, timestamp, JSON detail) for: signup, login success/failure,
-  MFA enable/disable/failed-verification, ADMIN cross-org access, and
-  material order creation/status changes. Job status changes have their own
-  dedicated `JobStatusHistory` table instead, which already covers that
-  domain in more detail than the generic log needs to duplicate.
+  MFA enable/disable/failed-verification, ADMIN cross-org access, material
+  order creation/status changes, broadcast sends, and driver assignment on
+  transport jobs. Job status changes have their own dedicated
+  `JobStatusHistory` table instead, which already covers that domain in more
+  detail than the generic log needs to duplicate.
 - Audit writes never block or fail the action they're recording — a broken
   audit write logs to stderr rather than breaking a user's login. In a real
   deployment, stderr needs to go to a monitored log sink, not vanish.
@@ -76,6 +80,23 @@ such audit would eventually check.
   generation, compliance record edits, org settings changes) aren't yet
   writing to this log. Extend `recordAuditLog()` calls to those action files
   as they come up for review.
+
+## API routes outside the Server Action model
+
+- `app/api/v1/jobs/transition` exists specifically for the Contractor Hub's
+  offline sync queue (`lib/offline/`) — a stable REST endpoint a service
+  worker/IndexedDB queue can retry, since Server Actions have opaque,
+  per-build action IDs that can't be replayed later. It shares the exact
+  same authorization and status-machine logic as the Server Action version
+  (`lib/jobTransition.ts`), not a separate, potentially-drifting copy.
+- It relies on the same `sameSite=lax` session cookie for CSRF protection as
+  every other authenticated route in this app (no separate CSRF token) —
+  Lax withholds the cookie on cross-site subrequests, which is what actually
+  stops a forged cross-origin POST here, same trust model as the existing
+  CSV export routes under `app/api/v1/export/`.
+- Uses `getSession()` (returns `null`) rather than `requireSession()`
+  (redirects) on failure, since a `fetch()` caller needs a real 401 JSON
+  body, not an HTML redirect to `/login`.
 
 ## Network & browser-facing controls
 
