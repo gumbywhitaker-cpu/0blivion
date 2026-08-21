@@ -31,6 +31,9 @@ function navForOrgType(orgType: string): { href: string; label: string }[] {
   if (orgType === "PACKHOUSE") {
     return [{ href: "/coolstore", label: "Coolstore" }, ...common];
   }
+  if (orgType === "ADMIN") {
+    return [{ href: "/admin", label: "Platform Admin" }];
+  }
   return [{ href: "/dashboard", label: "Dashboard" }, ...common];
 }
 

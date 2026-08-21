@@ -411,3 +411,42 @@ for a domain this broad in one pass, and claiming it would be the same mistake a
 original "Recovered Revenue" metric — a number that looks authoritative and isn't. What
 above is real: sourced, cited, snapshotted for audit trail, and clearly marked where
 it's a configurable default rather than a live regulatory feed.
+
+## 23. Platform Admin (cross-org role)
+
+Requested directly, not part of the original spec: a single account with visibility
+across every organization on the platform. This is a deliberate exception to the
+tenant-isolation model in Section 0.4/11 — every other role's queries are scoped to
+`session.organizationId`; `ADMIN` is the one org type that isn't.
+
+**What shipped**: `ADMIN` as a fifth org type (`lib/types.ts`), a read-only
+`/admin` overview page (`app/(app)/admin/page.tsx`) listing every organization with
+aggregate counts (users, orchards, jobs by status, invoices), and `isAdmin`/`assertIsAdmin`
+guards in `lib/auth/requireRole.ts`. `ADMIN` accounts are created only via
+`scripts/create-admin.ts`, run directly against the database with a generated
+high-entropy password (192 bits, printed once) — never through the public signup flow.
+
+**A real vulnerability found and fixed while building this**: the signup Server Action
+(`app/(auth)/actions.ts`) validated `orgType` against the full `ORG_TYPES` enum, while
+the signup UI only offered a restricted subset. Since Server Actions are directly
+callable independent of what the UI renders, a crafted request with `orgType: "ADMIN"`
+would have created a real ADMIN organization — a privilege-escalation path that existed
+before this feature and was only surfaced by building it. Fixed by introducing
+`SELF_SERVE_ORG_TYPES` (excludes `ADMIN`) and validating signup against that list
+instead; the UI now derives its dropdown from the same constant so the two can't drift
+apart again. Verified via Playwright: the signup dropdown never offers `ADMIN`, and a
+crafted `orgType=ADMIN` field injected directly into the form's DOM and submitted does
+not produce an ADMIN organization.
+
+**Deliberately narrow scope, and why**: this ships as read-only overview data, not a
+parallel admin UI for every existing feature (no cross-org job/invoice editing, no
+user management, no impersonation). Building that surface is a much larger scope than
+"a login with full access," and a wider blast-radius one — every additional admin
+mutation is another cross-tenant code path to get right. Ship the narrow, correct
+version now; widen deliberately if there's a concrete need, not by default.
+
+**Known gap, stated plainly**: there is no MFA on this build (already listed as
+deferred in Section 15), which matters more for this account than any other — it's the
+single highest-value credential in the system. Rate limiting on login is the same
+pre-existing gap. Both apply to every account, not just this one, but this is the
+account where they matter most.

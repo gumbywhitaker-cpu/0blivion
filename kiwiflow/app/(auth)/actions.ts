@@ -5,13 +5,15 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { setSessionCookie, clearSessionCookie } from "@/lib/auth/session";
-import { ORG_TYPES } from "@/lib/types";
+import { ORG_TYPES, SELF_SERVE_ORG_TYPES } from "@/lib/types";
 
 export type FormState = { error?: string } | undefined;
 
 const signupSchema = z.object({
   orgName: z.string().trim().min(2, "Organisation name is too short").max(200),
-  orgType: z.enum(ORG_TYPES),
+  // Validated against the self-serve subset, not the full ORG_TYPES — ADMIN must
+  // never be reachable by posting a crafted orgType value to this action.
+  orgType: z.enum(SELF_SERVE_ORG_TYPES),
   name: z.string().trim().min(2, "Your name is too short").max(200),
   email: z.string().trim().toLowerCase().email("Enter a valid email"),
   password: z.string().min(8, "Password must be at least 8 characters"),

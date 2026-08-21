@@ -12,6 +12,13 @@ export const ORG_TYPES = [
 ] as const;
 export type OrgType = (typeof ORG_TYPES)[number];
 
+// ADMIN is deliberately excluded: it's a platform-wide, cross-organization role
+// with no tenant isolation (see lib/auth/requireRole.ts assertIsAdmin), and must
+// never be reachable through self-service signup. The signup Server Action
+// validates against this list, not the full ORG_TYPES — an ADMIN org can only be
+// created by a script run directly against the database (scripts/create-admin.ts).
+export const SELF_SERVE_ORG_TYPES = ["GROWER", "CONTRACTOR", "TRANSPORT", "PACKHOUSE", "ACCOUNTANT"] as const;
+
 export const USER_ROLES = ["OWNER", "MANAGER", "FIELD", "DRIVER", "VIEWER"] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 

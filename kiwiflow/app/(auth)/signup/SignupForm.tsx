@@ -3,14 +3,17 @@
 import { useActionState } from "react";
 import Link from "next/link";
 import { signupAction, type FormState } from "../actions";
+import { SELF_SERVE_ORG_TYPES } from "@/lib/types";
 
-const SELF_SERVE_ORG_TYPES = [
-  { value: "GROWER", label: "Grower" },
-  { value: "CONTRACTOR", label: "Contractor" },
-  { value: "TRANSPORT", label: "Transport operator" },
-  { value: "PACKHOUSE", label: "Pack house" },
-  { value: "ACCOUNTANT", label: "Accountant" },
-] as const;
+// Labels for the shared SELF_SERVE_ORG_TYPES list (lib/types.ts) — that list is
+// also what the server action validates against, so the two can't drift apart.
+const ORG_TYPE_LABELS: Record<(typeof SELF_SERVE_ORG_TYPES)[number], string> = {
+  GROWER: "Grower",
+  CONTRACTOR: "Contractor",
+  TRANSPORT: "Transport operator",
+  PACKHOUSE: "Pack house",
+  ACCOUNTANT: "Accountant",
+};
 
 export function SignupForm() {
   const [state, action, pending] = useActionState<FormState, FormData>(signupAction, undefined);
@@ -29,8 +32,8 @@ export function SignupForm() {
           className="rounded-md border border-kf-border bg-white px-3 py-2 text-base outline-none focus:border-kf-green-600"
         >
           {SELF_SERVE_ORG_TYPES.map((t) => (
-            <option key={t.value} value={t.value}>
-              {t.label}
+            <option key={t} value={t}>
+              {ORG_TYPE_LABELS[t]}
             </option>
           ))}
         </select>
