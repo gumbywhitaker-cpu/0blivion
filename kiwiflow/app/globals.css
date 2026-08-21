@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f6f5f1;
+  --foreground: #171a18;
+
+  --kf-green-900: #0f2e1d;
+  --kf-green-700: #16532f;
+  --kf-green-600: #1f7a4d;
+  --kf-green-500: #2e9e63;
+  --kf-green-100: #e3f0e7;
+  --kf-charcoal: #1c1f1e;
+  --kf-gold: #c98a1f;
+  --kf-red: #b3261e;
+  --kf-card: #ffffff;
+  --kf-border: #e4e1d8;
+  --kf-muted: #5b6660;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-kf-green-900: var(--kf-green-900);
+  --color-kf-green-700: var(--kf-green-700);
+  --color-kf-green-600: var(--kf-green-600);
+  --color-kf-green-500: var(--kf-green-500);
+  --color-kf-green-100: var(--kf-green-100);
+  --color-kf-charcoal: var(--kf-charcoal);
+  --color-kf-gold: var(--kf-gold);
+  --color-kf-red: var(--kf-red);
+  --color-kf-card: var(--kf-card);
+  --color-kf-border: var(--kf-border);
+  --color-kf-muted: var(--kf-muted);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+/* Large, thumb-friendly hit targets everywhere by default — the "mud test"
+   (docs/BLUEPRINT.md / spec Section 33). */
+button,
+a.btn,
+input,
+select,
+textarea {
+  min-height: 44px;
+}

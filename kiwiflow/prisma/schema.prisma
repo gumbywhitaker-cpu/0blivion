@@ -1,0 +1,336 @@
+// KiwiFlow data model — see docs/BLUEPRINT.md Section 4 for design notes.
+//
+// Status fields are plain Strings, not Prisma enums, on purpose: SQLite (local dev)
+// and PostgreSQL (production) both support String identically, so the datasource can
+// be swapped with a single line here + DATABASE_URL. Allowed values are enforced by
+// TypeScript union types + zod at the application layer (lib/types.ts).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ---------------------------------------------------------------------------
+// Tenancy & Identity
+// ---------------------------------------------------------------------------
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  type      String // GROWER | CONTRACTOR | TRANSPORT | PACKHOUSE | ACCOUNTANT | ADMIN
+  region    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users             User[]
+  orchards          Orchard[]
+  crews             Crew[]
+  jobsAsGrower      Job[]              @relation("GrowerJobs")
+  jobsAsContractor  Job[]              @relation("ContractorJobs")
+  invoicesIssued    Invoice[]          @relation("InvoiceFrom")
+  invoicesReceived  Invoice[]          @relation("InvoiceTo")
+  notifications     Notification[]
+  events            Event[]
+  workflowRules     WorkflowRule[]
+  onboardingInvites OnboardingInvite[]
+  documents         Document[]
+  auditLogs         AuditLog[]
+  linksAsGrower     ContractorLink[]   @relation("GrowerLinks")
+  linksAsContractor ContractorLink[]   @relation("ContractorLinks")
+
+  @@index([type])
+}
+
+model User {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  email          String       @unique
+  passwordHash   String
+  role           String // OWNER | MANAGER | FIELD | DRIVER | VIEWER
+  phone          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  jobsCreated    Job[]              @relation("JobCreatedBy")
+  statusChanges  JobStatusHistory[] @relation("StatusChangedBy")
+  notifications  Notification[]
+  auditLogs      AuditLog[]
+  crewMemberLink CrewMember?
+
+  @@index([organizationId])
+}
+
+// ---------------------------------------------------------------------------
+// Pillar 1 — Customer Database
+// ---------------------------------------------------------------------------
+
+model Orchard {
+  id             String       @id @default(cuid())
+  organizationId String // owning grower org
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  region         String?
+  address        String?
+  hectares       Float?
+  notes          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  jobs Job[]
+
+  @@index([organizationId])
+}
+
+// Explicit link between a grower org and a contractor org — cross-org visibility
+// only exists through an ACTIVE row here (see docs/BLUEPRINT.md Section 3).
+model ContractorLink {
+  id              String       @id @default(cuid())
+  growerOrgId     String
+  growerOrg       Organization @relation("GrowerLinks", fields: [growerOrgId], references: [id], onDelete: Cascade)
+  contractorOrgId String
+  contractorOrg   Organization @relation("ContractorLinks", fields: [contractorOrgId], references: [id], onDelete: Cascade)
+  status          String       @default("ACTIVE") // ACTIVE | SUSPENDED
+  createdAt       DateTime     @default(now())
+
+  @@unique([growerOrgId, contractorOrgId])
+  @@index([contractorOrgId])
+}
+
+model Crew {
+  id             String       @id @default(cuid())
+  organizationId String // owning contractor org
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  members CrewMember[]
+  jobs    Job[]
+
+  @@index([organizationId])
+}
+
+model CrewMember {
+  id        String   @id @default(cuid())
+  crewId    String
+  crew      Crew     @relation(fields: [crewId], references: [id], onDelete: Cascade)
+  name      String
+  phone     String?
+  userId    String?  @unique
+  user      User?    @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@index([crewId])
+}
+
+// ---------------------------------------------------------------------------
+// Pillar 2 — Job Scheduling
+// ---------------------------------------------------------------------------
+
+model Job {
+  id              String        @id @default(cuid())
+  growerOrgId     String
+  growerOrg       Organization  @relation("GrowerJobs", fields: [growerOrgId], references: [id], onDelete: Cascade)
+  contractorOrgId String?
+  contractorOrg   Organization? @relation("ContractorJobs", fields: [contractorOrgId], references: [id])
+  orchardId       String
+  orchard         Orchard       @relation(fields: [orchardId], references: [id])
+  crewId          String?
+  crew            Crew?         @relation(fields: [crewId], references: [id])
+
+  jobType               String // e.g. HARVEST, SPRAY, TRANSPORT, GENERAL
+  status                String   @default("NEW") // NEW|SCHEDULED|CONFIRMED|IN_PROGRESS|COMPLETE|INVOICED|CANCELLED
+  priority              String   @default("NORMAL") // LOW|NORMAL|HIGH|URGENT
+  scheduledDate         DateTime
+  startTime             String? // "HH:mm", kept as string to avoid timezone-of-a-time-only-value ambiguity
+  estimatedDurationMins Int?
+  instructions          String?
+
+  rate     Float? // $ per unit
+  unit     String? // e.g. "hour", "bin", "hectare"
+  quantity Float? // captured at completion
+
+  createdById String
+  createdBy   User     @relation("JobCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  statusHistory JobStatusHistory[]
+  invoiceItems  InvoiceItem[]
+  notifications Notification[]
+
+  @@index([growerOrgId])
+  @@index([contractorOrgId])
+  @@index([status])
+  @@index([scheduledDate])
+}
+
+model JobStatusHistory {
+  id          String   @id @default(cuid())
+  jobId       String
+  job         Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  fromStatus  String?
+  toStatus    String
+  // Null = system/Conductor-driven transition (e.g. auto-move to INVOICED on
+  // invoice creation), not a person. Keep this distinguishable from a real actor.
+  changedById String?
+  changedBy   User?    @relation("StatusChangedBy", fields: [changedById], references: [id])
+  note        String?
+  changedAt   DateTime @default(now())
+
+  @@index([jobId])
+}
+
+// ---------------------------------------------------------------------------
+// Pillar 3 — Invoicing
+// ---------------------------------------------------------------------------
+
+model Invoice {
+  id            String       @id @default(cuid())
+  invoiceNumber String       @unique
+  fromOrgId     String // who is billing
+  fromOrg       Organization @relation("InvoiceFrom", fields: [fromOrgId], references: [id])
+  toOrgId       String // who is being billed
+  toOrg         Organization @relation("InvoiceTo", fields: [toOrgId], references: [id])
+  status        String       @default("DRAFT") // DRAFT|SENT|PAID|OVERDUE|VOID
+  gstRate       Float        @default(0.15)
+  subtotal      Float        @default(0)
+  gstAmount     Float        @default(0)
+  total         Float        @default(0)
+  dueDate       DateTime?
+  issuedAt      DateTime?
+  paidAt        DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  items InvoiceItem[]
+
+  @@index([fromOrgId])
+  @@index([toOrgId])
+  @@index([status])
+}
+
+model InvoiceItem {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  jobId       String?
+  job         Job?    @relation(fields: [jobId], references: [id])
+  description String
+  quantity    Float   @default(1)
+  rate        Float
+  amount      Float
+
+  @@index([invoiceId])
+}
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+model Notification {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String?
+  user           User?        @relation(fields: [userId], references: [id])
+  jobId          String?
+  job            Job?         @relation(fields: [jobId], references: [id])
+  urgency        String       @default("NORMAL") // NORMAL|URGENT|CRITICAL
+  title          String
+  body           String
+  read           Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId])
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Conductor — Event bus & rule engine
+// ---------------------------------------------------------------------------
+
+model Event {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  type           String // e.g. JOB_COMPLETED
+  payload        String // JSON-encoded
+  createdAt      DateTime     @default(now())
+  processedAt    DateTime?
+
+  @@index([organizationId])
+  @@index([type])
+}
+
+model WorkflowRule {
+  id             String        @id @default(cuid())
+  organizationId String? // null = global rule
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  eventType      String
+  enabled        Boolean       @default(true)
+  actions        String // JSON-encoded array of { action, params }
+  createdAt      DateTime      @default(now())
+
+  @@index([eventType])
+  @@index([organizationId])
+}
+
+// ---------------------------------------------------------------------------
+// OneTap Entry
+// ---------------------------------------------------------------------------
+
+model OnboardingInvite {
+  id             String       @id @default(cuid())
+  organizationId String // inviting grower org
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  token          String       @unique
+  contractorName String?
+  status         String       @default("PENDING") // PENDING|USED|EXPIRED
+  expiresAt      DateTime
+  createdAt      DateTime     @default(now())
+  usedAt         DateTime?
+
+  @@index([organizationId])
+}
+
+// ---------------------------------------------------------------------------
+// Documents & Audit
+// ---------------------------------------------------------------------------
+
+model Document {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  ownerType      String // JOB | CREW_MEMBER | ORGANIZATION
+  ownerId        String
+  fileName       String
+  storagePath    String
+  uploadedAt     DateTime     @default(now())
+
+  @@index([organizationId])
+  @@index([ownerType, ownerId])
+}
+
+model AuditLog {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actorId        String?
+  actor          User?        @relation(fields: [actorId], references: [id])
+  action         String
+  entityType     String
+  entityId       String
+  detail         String? // JSON-encoded
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId])
+  @@index([entityType, entityId])
+}
