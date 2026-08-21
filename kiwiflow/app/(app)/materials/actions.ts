@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/auth/session";
 import { assertCanManage } from "@/lib/auth/requireRole";
 import { emitEvent } from "@/lib/conductor/emit";
+import { recordAuditLog } from "@/lib/audit";
 import {
   SUPPLIER_CATEGORIES,
   MATERIAL_ORDER_STATUS_TRANSITIONS,
@@ -121,6 +122,15 @@ export async function createMaterialOrderAction(_prev: FormState, formData: Form
     },
   });
 
+  await recordAuditLog({
+    organizationId: session.organizationId,
+    actorId: session.userId,
+    action: "material_order.created",
+    entityType: "MaterialOrder",
+    entityId: order.id,
+    detail: { supplierId: order.supplierId, subtotal: order.subtotal },
+  });
+
   redirect(`/materials/${order.id}`);
 }
 
@@ -163,6 +173,18 @@ export async function transitionMaterialOrderAction(_prev: FormState, formData: 
       status: target,
       ...(target === "DELIVERED" ? { deliveredAt: new Date() } : {}),
     },
+  });
+
+  // MaterialOrder has no dedicated history table the way Job does
+  // (JobStatusHistory) — the generic audit log is the only record of who
+  // moved this order between statuses.
+  await recordAuditLog({
+    organizationId: session.organizationId,
+    actorId: session.userId,
+    action: "material_order.status_changed",
+    entityType: "MaterialOrder",
+    entityId: order.id,
+    detail: { fromStatus, toStatus: target },
   });
 
   const eventType = EVENT_FOR_STATUS[target];

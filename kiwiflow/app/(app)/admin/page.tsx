@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { isAdmin } from "@/lib/auth/requireRole";
 import { prisma } from "@/lib/db";
+import { recordAuditLog } from "@/lib/audit";
 
 // Deliberately read-only and deliberately shallow for v1: a cross-org overview,
 // not a parallel admin UI for every existing feature page. See docs/BLUEPRINT.md
@@ -14,7 +15,17 @@ export default async function AdminOverviewPage() {
   // page for a non-admin who lands here.
   if (!isAdmin(session.orgType)) redirect("/dashboard");
 
-  const [orgs, jobCounts, invoiceAgg, userCount] = await Promise.all([
+  // This is the one deliberate bypass of tenant isolation in the app — every
+  // view of it is logged, same as any other privileged cross-org access.
+  await recordAuditLog({
+    organizationId: session.organizationId,
+    actorId: session.userId,
+    action: "admin.overview_viewed",
+    entityType: "AdminOverview",
+    entityId: "all-organizations",
+  });
+
+  const [orgs, jobCounts, invoiceAgg, userCount, auditLog] = await Promise.all([
     prisma.organization.findMany({
       orderBy: { createdAt: "desc" },
       include: { _count: { select: { users: true, orchards: true, jobsAsGrower: true, jobsAsContractor: true } } },
@@ -22,6 +33,11 @@ export default async function AdminOverviewPage() {
     prisma.job.groupBy({ by: ["status"], _count: { _all: true } }),
     prisma.invoice.aggregate({ _sum: { total: true }, _count: { _all: true } }),
     prisma.user.count(),
+    prisma.auditLog.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      include: { actor: { select: { name: true, email: true } }, organization: { select: { name: true } } },
+    }),
   ]);
 
   const countByStatus = Object.fromEntries(jobCounts.map((s) => [s.status, s._count._all]));
@@ -85,6 +101,38 @@ export default async function AdminOverviewPage() {
                   <td className="px-4 py-3">{org._count.jobsAsGrower}</td>
                   <td className="px-4 py-3">{org._count.jobsAsContractor}</td>
                   <td className="px-4 py-3">{org.createdAt.toISOString().slice(0, 10)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-lg font-semibold text-kf-charcoal">Security activity (all orgs)</h2>
+        <div className="overflow-x-auto rounded-lg border border-kf-border bg-kf-card">
+          <table className="w-full min-w-[700px] text-left text-sm">
+            <thead className="border-b border-kf-border text-xs uppercase text-kf-muted">
+              <tr>
+                <th className="px-4 py-3">When</th>
+                <th className="px-4 py-3">Organisation</th>
+                <th className="px-4 py-3">Who</th>
+                <th className="px-4 py-3">Event</th>
+                <th className="px-4 py-3">Entity</th>
+              </tr>
+            </thead>
+            <tbody>
+              {auditLog.map((entry) => (
+                <tr key={entry.id} className="border-b border-kf-border last:border-0">
+                  <td className="px-4 py-3 text-kf-muted">
+                    {entry.createdAt.toISOString().slice(0, 19).replace("T", " ")}
+                  </td>
+                  <td className="px-4 py-3">{entry.organization.name}</td>
+                  <td className="px-4 py-3">{entry.actor?.name ?? entry.actor?.email ?? "—"}</td>
+                  <td className="px-4 py-3 font-mono text-xs">{entry.action}</td>
+                  <td className="px-4 py-3 text-kf-muted">
+                    {entry.entityType}:{entry.entityId}
+                  </td>
                 </tr>
               ))}
             </tbody>

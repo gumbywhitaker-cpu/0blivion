@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/auth/session";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { generateTotpSecret, verifyTotp, generateBackupCodes } from "@/lib/auth/totp";
+import { recordAuditLog } from "@/lib/audit";
 
 export type MfaFormState = { error?: string; backupCodes?: string[] } | undefined;
 
@@ -47,6 +48,14 @@ export async function confirmMfaAction(_prev: MfaFormState, formData: FormData):
     data: { totpEnabled: true, totpBackupCodes: JSON.stringify(hashedCodes) },
   });
 
+  await recordAuditLog({
+    organizationId: session.organizationId,
+    actorId: session.userId,
+    action: "mfa.enabled",
+    entityType: "User",
+    entityId: session.userId,
+  });
+
   // Deliberately NOT calling revalidatePath here. It would refresh the parent
   // server component (enabled: true) and swap MfaSettings to the "disable"
   // view before the user has a chance to see these codes — they're shown
@@ -83,6 +92,14 @@ export async function disableMfaAction(_prev: MfaFormState, formData: FormData):
   await prisma.user.update({
     where: { id: session.userId },
     data: { totpEnabled: false, totpSecret: null, totpBackupCodes: null },
+  });
+
+  await recordAuditLog({
+    organizationId: session.organizationId,
+    actorId: session.userId,
+    action: "mfa.disabled",
+    entityType: "User",
+    entityId: session.userId,
   });
 
   revalidatePath("/settings");

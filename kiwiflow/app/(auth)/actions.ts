@@ -21,6 +21,7 @@ import {
   SIGNUP_RATE_LIMIT_MESSAGE,
 } from "@/lib/auth/rateLimit";
 import { verifyTotp } from "@/lib/auth/totp";
+import { recordAuditLog } from "@/lib/audit";
 import { ORG_TYPES, SELF_SERVE_ORG_TYPES } from "@/lib/types";
 
 export type FormState = { error?: string } | undefined;
@@ -71,6 +72,15 @@ export async function signupAction(_prev: FormState, formData: FormData): Promis
     return { user, organization };
   });
 
+  await recordAuditLog({
+    organizationId: organization.id,
+    actorId: user.id,
+    action: "user.signup",
+    entityType: "User",
+    entityId: user.id,
+    detail: { email, orgType },
+  });
+
   await setSessionCookie({
     userId: user.id,
     organizationId: organization.id,
@@ -106,6 +116,15 @@ export async function loginAction(_prev: FormState, formData: FormData): Promise
   const valid = !!user && (await verifyPassword(password, user.passwordHash));
   await recordLoginAttempt(email, valid);
   if (!valid) {
+    if (user) {
+      await recordAuditLog({
+        organizationId: user.organizationId,
+        actorId: user.id,
+        action: "user.login_failed",
+        entityType: "User",
+        entityId: user.id,
+      });
+    }
     return { error: "Incorrect email or password" };
   }
 
@@ -113,6 +132,14 @@ export async function loginAction(_prev: FormState, formData: FormData): Promise
     await setMfaPendingCookie(user.id);
     redirect("/login/verify-mfa");
   }
+
+  await recordAuditLog({
+    organizationId: user.organizationId,
+    actorId: user.id,
+    action: "user.login",
+    entityType: "User",
+    entityId: user.id,
+  });
 
   await setSessionCookie({
     userId: user.id,
@@ -155,6 +182,7 @@ export async function verifyMfaAction(_prev: FormState, formData: FormData): Pro
   }
 
   let valid = verifyTotp(user.totpSecret, code);
+  let method: "totp" | "backup_code" = "totp";
 
   // Backup codes are 10 hex chars, never a bare 6-digit string, so a wrong
   // TOTP guess (the common case) skips straight past this rather than paying
@@ -165,6 +193,7 @@ export async function verifyMfaAction(_prev: FormState, formData: FormData): Pro
     for (let i = 0; i < backupCodes.length; i++) {
       if (await verifyPassword(code.toUpperCase(), backupCodes[i]!)) {
         valid = true;
+        method = "backup_code";
         // Single-use: remove it immediately so it can't be replayed.
         backupCodes.splice(i, 1);
         await prisma.user.update({ where: { id: user.id }, data: { totpBackupCodes: JSON.stringify(backupCodes) } });
@@ -175,8 +204,24 @@ export async function verifyMfaAction(_prev: FormState, formData: FormData): Pro
 
   await recordLoginAttempt(`mfa:${user.email}`, valid);
   if (!valid) {
+    await recordAuditLog({
+      organizationId: user.organizationId,
+      actorId: user.id,
+      action: "user.mfa_failed",
+      entityType: "User",
+      entityId: user.id,
+    });
     return { error: "That code didn't work. Try again." };
   }
+
+  await recordAuditLog({
+    organizationId: user.organizationId,
+    actorId: user.id,
+    action: "user.login",
+    entityType: "User",
+    entityId: user.id,
+    detail: { mfaMethod: method },
+  });
 
   await clearMfaPendingCookie();
   await setSessionCookie({
