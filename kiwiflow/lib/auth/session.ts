@@ -89,3 +89,47 @@ export async function clearSessionCookie(): Promise<void> {
 }
 
 export const SESSION_COOKIE_NAME = COOKIE_NAME;
+
+/**
+ * MFA pending state (docs/BLUEPRINT.md Section 25): a short-lived, separate
+ * cookie proving "this browser correctly supplied user X's password" without
+ * yet granting a real session — the real session cookie is only set after the
+ * TOTP/backup-code step succeeds too. A distinct cookie name and 5-minute TTL
+ * keep this from ever being mistaken for (or reused as) a full session token.
+ */
+const MFA_PENDING_COOKIE_NAME = "kf_mfa_pending";
+const MFA_PENDING_TTL_SECONDS = 60 * 5;
+
+export async function setMfaPendingCookie(userId: string): Promise<void> {
+  const token = await new SignJWT({ userId, purpose: "mfa_pending" })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime(`${MFA_PENDING_TTL_SECONDS}s`)
+    .sign(getSecretKey());
+  const store = await cookies();
+  store.set(MFA_PENDING_COOKIE_NAME, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: MFA_PENDING_TTL_SECONDS,
+  });
+}
+
+export async function getMfaPendingUserId(): Promise<string | null> {
+  const store = await cookies();
+  const token = store.get(MFA_PENDING_COOKIE_NAME)?.value;
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, getSecretKey());
+    if (payload.purpose !== "mfa_pending" || typeof payload.userId !== "string") return null;
+    return payload.userId;
+  } catch {
+    return null;
+  }
+}
+
+export async function clearMfaPendingCookie(): Promise<void> {
+  const store = await cookies();
+  store.delete(MFA_PENDING_COOKIE_NAME);
+}

@@ -293,12 +293,13 @@ scope this document is not going to hand-wave past.
     indicator — real API data, fails closed to "unavailable" rather than fabricating
     numbers if the call fails (Section 0 constraint applied here too)
 15. Platform Admin — read-only cross-org role (Section 23)
-16. Login rate limiting (Section 24)
+16. Login + signup rate limiting (Section 24)
+17. Two-factor authentication, TOTP (Section 25)
 
 Explicitly deferred: Logistics Bridge, mass broadcasting, AI layer, regional heat
-maps, Zespri oversight engine, offline sync, MFA, Postgres RLS, SMS/email/push
-provider wiring, PDF generation via headless browser (CSV + print-to-PDF ships
-instead — see Section 9).
+maps, Zespri oversight engine, offline sync, Postgres RLS, SMS/email/push provider
+wiring, PDF generation via headless browser (CSV + print-to-PDF ships instead — see
+Section 9).
 
 ## 16. Testing / Deployment / Scaling (brief, honest)
 
@@ -474,5 +475,50 @@ introducing new infrastructure (Redis, etc.) an app this size doesn't otherwise 
 Revisit if the app ever runs as multiple instances behind a load balancer, where a
 shared cache would be the correct mechanism instead of N separate lockout counters.
 
-Scope note: this covers login only, not signup. Signup-flood / fake-account-creation
-protection is a related but separate gap and remains deferred (Section 15).
+Scope note: this covered login only when first shipped; signup-flood protection has
+since been added (below) using the same rate-limiting building blocks.
+
+**Signup-flood protection**: a `SignupAttempt` table backs a 10-signups-per-hour
+ceiling keyed on best-effort client IP (`x-forwarded-for`, via `getClientIpForRateLimit`
+in `lib/auth/rateLimit.ts`) rather than email — an attacker flooding signups is
+creating many *different* fake accounts, so email has no shared signal to key on the
+way it does for login. IP is best-effort because Next.js's `headers()` API has no
+built-in client-IP accessor; a missing header falls back to a shared "unknown" bucket
+rather than skipping the check.
+
+## 25. Two-factor authentication (TOTP)
+
+Opt-in TOTP MFA (`User.totpSecret`/`totpEnabled`/`totpBackupCodes`), implemented
+directly on `node:crypto` (RFC 6238/4226 — HMAC-SHA1, 30s step, 6 digits) rather than
+adding a dependency; `lib/auth/totp.ts` is the full spec, not a simplified subset.
+Setup requires proving the authenticator app actually works (one correct code) before
+`totpEnabled` flips on — an unconfirmed QR scan can never lock someone out. 8 single-use
+backup codes are generated at that same moment, shown exactly once, and only their
+bcrypt hashes are persisted.
+
+Login gets a second, short-lived (5-minute) `kf_mfa_pending` cookie — distinct from the
+real session cookie by name, purpose claim, and TTL — set once the password checks out,
+cleared once the TOTP/backup-code step succeeds. MFA verification reuses the same
+`LoginAttempt`-backed lockout as password login (Section 24), because a bare 6-digit
+code is far more brute-forceable than a password if left unguarded and this is the
+second factor protecting every account. Disabling MFA requires both the password and a
+current code again — a stolen or left-open session alone can't silently turn protection
+off.
+
+**A real bug found and fixed while building this, twice over**:
+1. `confirmMfaAction`'s `revalidatePath` call raced the client's own state update —
+   the parent server component would re-render with `enabled: true` and swap the UI to
+   the "disable MFA" view before the user ever saw their one-time backup codes. Fixed
+   by having the client own that transition entirely (see `MfaSettings.tsx`'s
+   `onEnabled`/`newBackupCodes` state) and deliberately dropping the `revalidatePath`
+   call from that specific action.
+2. Every wrong TOTP guess fell through to checking all 8 backup codes via sequential
+   bcrypt compares (~3 seconds of CPU-bound work) before reporting failure — not just
+   slow, but needless load triggered by any typo. Backup codes are 10 hex characters
+   and never match `^\d{6}$`, so `verifyMfaAction` now skips that path entirely for
+   anything that looks like a TOTP code, only falling back to the bcrypt check for
+   input actually shaped like a backup code.
+
+Verified end-to-end via Playwright against a throwaway account (not the shared demo
+login): full setup, wrong-code rejection, correct-code login, backup-code login,
+backup-code single-use enforcement (a reused code is rejected), and clean disable.

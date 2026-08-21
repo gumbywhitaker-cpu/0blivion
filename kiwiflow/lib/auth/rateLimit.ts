@@ -26,3 +26,33 @@ export async function recordLoginAttempt(email: string, succeeded: boolean): Pro
 }
 
 export const LOCKOUT_MESSAGE = `Too many failed attempts. Try again in ${WINDOW_MINUTES} minutes.`;
+
+/**
+ * Best-effort client IP from x-forwarded-for (set by most hosting platforms —
+ * Vercel, most reverse proxies — but not guaranteed everywhere). Falls back to
+ * a shared "unknown" bucket rather than skipping the check entirely: a fixed
+ * ceiling on unattributed signups is safer than no ceiling at all.
+ */
+export async function getClientIpForRateLimit(): Promise<string> {
+  const { headers } = await import("next/headers");
+  const h = await headers();
+  const forwarded = h.get("x-forwarded-for");
+  return forwarded?.split(",")[0]?.trim() || "unknown";
+}
+
+const SIGNUP_WINDOW_MINUTES = 60;
+const MAX_SIGNUPS_PER_IP = 10;
+
+export async function isSignupRateLimited(ip: string): Promise<boolean> {
+  const since = new Date(Date.now() - SIGNUP_WINDOW_MINUTES * 60 * 1000);
+  const recentSignups = await prisma.signupAttempt.count({
+    where: { ip, createdAt: { gte: since } },
+  });
+  return recentSignups >= MAX_SIGNUPS_PER_IP;
+}
+
+export async function recordSignupAttempt(ip: string): Promise<void> {
+  await prisma.signupAttempt.create({ data: { ip } });
+}
+
+export const SIGNUP_RATE_LIMIT_MESSAGE = "Too many organisations created from this network recently. Try again later.";

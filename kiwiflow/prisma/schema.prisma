@@ -65,6 +65,13 @@ model User {
   passwordHash   String
   role           String // OWNER | MANAGER | FIELD | DRIVER | VIEWER
   phone          String?
+  // TOTP MFA (docs/BLUEPRINT.md Section 25). totpSecret is set as soon as setup
+  // starts but totpEnabled stays false until the user proves their authenticator
+  // app actually works by submitting one correct code — never flip this on
+  // unconfirmed, or a typo'd QR scan permanently locks someone out.
+  totpSecret       String?
+  totpEnabled      Boolean  @default(false)
+  totpBackupCodes  String? // JSON array of bcrypt-hashed single-use recovery codes
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
@@ -92,6 +99,20 @@ model LoginAttempt {
   createdAt   DateTime @default(now())
 
   @@index([email, createdAt])
+}
+
+// Signup-flood protection (docs/BLUEPRINT.md Section 24). IP-based, not
+// email-based like LoginAttempt: an attacker flooding signups is creating many
+// DIFFERENT fake accounts, not attacking one — email has no shared signal to
+// key on, IP does. ip is nullable because it comes from a best-effort header
+// (see lib/auth/rateLimit.ts) that isn't guaranteed present in every hosting
+// environment; a missing IP falls back to a shared bucket rather than no limit.
+model SignupAttempt {
+  id        String   @id @default(cuid())
+  ip        String
+  createdAt DateTime @default(now())
+
+  @@index([ip, createdAt])
 }
 
 // ---------------------------------------------------------------------------
