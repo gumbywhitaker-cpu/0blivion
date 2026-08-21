@@ -50,6 +50,8 @@ model Organization {
   linksAsGrower            ContractorLink[]          @relation("GrowerLinks")
   linksAsContractor        ContractorLink[]          @relation("ContractorLinks")
   coolstoreTemperatureLogs CoolstoreTemperatureLog[]
+  suppliers                Supplier[]
+  materialOrders           MaterialOrder[]
 
   @@index([type])
 }
@@ -74,6 +76,7 @@ model User {
   maturityTestsRecorded HarvestMaturityTest[]     @relation("MaturityTestRecordedBy")
   sprayEntriesRecorded  SprayDiaryEntry[]         @relation("SprayEntryApplicator")
   coolstoreLogsRecorded CoolstoreTemperatureLog[] @relation("CoolstoreLogRecordedBy")
+  materialOrdersCreated MaterialOrder[]           @relation("MaterialOrderCreatedBy")
 
   @@index([organizationId])
 }
@@ -94,9 +97,10 @@ model Orchard {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
-  jobs          Job[]
-  maturityTests HarvestMaturityTest[]
-  sprayEntries  SprayDiaryEntry[]
+  jobs           Job[]
+  maturityTests  HarvestMaturityTest[]
+  sprayEntries   SprayDiaryEntry[]
+  materialOrders MaterialOrder[]
 
   @@index([organizationId])
 }
@@ -427,4 +431,73 @@ model AuditLog {
 
   @@index([organizationId])
   @@index([entityType, entityId])
+}
+
+// ---------------------------------------------------------------------------
+// Pillar 4 — Materials Ordering
+//
+// Suppliers are external businesses (fertiliser, chemical, packaging etc.), not
+// KiwiFlow organizations — an org manages its own supplier list, there's no
+// cross-tenant relation here the way ContractorLink connects two orgs. Money never
+// flows through the Invoice model for this: a MaterialOrder is what an org owes an
+// external supplier, not a bill between two KiwiFlow tenants.
+// ---------------------------------------------------------------------------
+
+model Supplier {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  category       String // FERTILISER|CHEMICAL|PACKAGING|FUEL|EQUIPMENT|OTHER
+  contactName    String?
+  phone          String?
+  email          String?
+  notes          String?
+  createdAt      DateTime     @default(now())
+
+  orders MaterialOrder[]
+
+  @@index([organizationId])
+}
+
+model MaterialOrder {
+  id             String       @id @default(cuid())
+  organizationId String // the org placing the order (grower, contractor, or packhouse)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  supplierId     String
+  supplier       Supplier     @relation(fields: [supplierId], references: [id])
+  orchardId      String? // which orchard this order is for, if applicable
+  orchard        Orchard?     @relation(fields: [orchardId], references: [id])
+
+  status                String    @default("DRAFT") // DRAFT|SUBMITTED|CONFIRMED|DELIVERED|CANCELLED
+  requestedDeliveryDate DateTime?
+  deliveredAt           DateTime?
+  notes                 String?
+  // Denormalized like Invoice.subtotal — recomputed from items on every mutation,
+  // not trusted as an independent source of truth.
+  subtotal              Float     @default(0)
+
+  createdById String
+  createdBy   User     @relation("MaterialOrderCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items MaterialOrderItem[]
+
+  @@index([organizationId])
+  @@index([supplierId])
+  @@index([status])
+}
+
+model MaterialOrderItem {
+  id              String        @id @default(cuid())
+  materialOrderId String
+  materialOrder   MaterialOrder @relation(fields: [materialOrderId], references: [id], onDelete: Cascade)
+  description     String
+  quantity        Float
+  unit            String // e.g. "L", "kg", "bag", "unit"
+  unitPrice       Float
+  amount          Float // quantity * unitPrice, snapshotted at line-add time
+
+  @@index([materialOrderId])
 }

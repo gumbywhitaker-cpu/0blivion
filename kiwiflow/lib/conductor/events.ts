@@ -15,6 +15,9 @@ export type ConductorEvent =
     }
   | { type: "INVOICE_CREATED"; payload: { invoiceId: string } }
   | { type: "INVOICE_SENT"; payload: { invoiceId: string } }
-  | { type: "COOLSTORE_TEMP_ALERT"; payload: { logId: string; organizationId: string; facilityName: string; temperatureC: number } };
+  | { type: "COOLSTORE_TEMP_ALERT"; payload: { logId: string; organizationId: string; facilityName: string; temperatureC: number } }
+  | { type: "MATERIAL_ORDER_SUBMITTED"; payload: { materialOrderId: string } }
+  | { type: "MATERIAL_ORDER_CONFIRMED"; payload: { materialOrderId: string } }
+  | { type: "MATERIAL_ORDER_DELIVERED"; payload: { materialOrderId: string } };
 
 export type ConductorEventType = ConductorEvent["type"];

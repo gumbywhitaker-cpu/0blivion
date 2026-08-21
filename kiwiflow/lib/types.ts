@@ -56,6 +56,29 @@ export type ContractorLinkStatus = (typeof CONTRACTOR_LINK_STATUSES)[number];
 export const ONBOARDING_STATUSES = ["PENDING", "USED", "EXPIRED"] as const;
 export type OnboardingStatus = (typeof ONBOARDING_STATUSES)[number];
 
+export const SUPPLIER_CATEGORIES = [
+  "FERTILISER",
+  "CHEMICAL",
+  "PACKAGING",
+  "FUEL",
+  "EQUIPMENT",
+  "OTHER",
+] as const;
+export type SupplierCategory = (typeof SUPPLIER_CATEGORIES)[number];
+
+export const MATERIAL_ORDER_STATUSES = ["DRAFT", "SUBMITTED", "CONFIRMED", "DELIVERED", "CANCELLED"] as const;
+export type MaterialOrderStatus = (typeof MATERIAL_ORDER_STATUSES)[number];
+
+// Same shape as JOB_STATUS_TRANSITIONS: the Conductor and order actions both
+// consult this so an invalid jump (e.g. DRAFT -> DELIVERED) isn't reachable.
+export const MATERIAL_ORDER_STATUS_TRANSITIONS: Record<MaterialOrderStatus, MaterialOrderStatus[]> = {
+  DRAFT: ["SUBMITTED", "CANCELLED"],
+  SUBMITTED: ["CONFIRMED", "CANCELLED"],
+  CONFIRMED: ["DELIVERED", "CANCELLED"],
+  DELIVERED: [],
+  CANCELLED: [],
+};
+
 export const KIWIFRUIT_VARIETIES = ["HAYWARD", "GOLD3", "OTHER"] as const;
 export type KiwifruitVariety = (typeof KIWIFRUIT_VARIETIES)[number];
 

@@ -1,4 +1,4 @@
-import type { JobStatus, JobPriority, InvoiceStatus, NotificationUrgency } from "@/lib/types";
+import type { JobStatus, JobPriority, InvoiceStatus, NotificationUrgency, MaterialOrderStatus } from "@/lib/types";
 
 const JOB_STATUS_STYLE: Record<JobStatus, string> = {
   NEW: "bg-zinc-100 text-zinc-700",
@@ -63,6 +63,23 @@ export function UrgencyBadge({ urgency }: { urgency: string }) {
   return (
     <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${style}`}>
       {urgency}
+    </span>
+  );
+}
+
+const MATERIAL_ORDER_STATUS_STYLE: Record<MaterialOrderStatus, string> = {
+  DRAFT: "bg-zinc-100 text-zinc-700",
+  SUBMITTED: "bg-blue-100 text-blue-700",
+  CONFIRMED: "bg-kf-gold/20 text-kf-gold",
+  DELIVERED: "bg-kf-green-100 text-kf-green-700",
+  CANCELLED: "bg-zinc-200 text-zinc-500 line-through",
+};
+
+export function MaterialOrderStatusBadge({ status }: { status: string }) {
+  const style = MATERIAL_ORDER_STATUS_STYLE[status as MaterialOrderStatus] ?? "bg-zinc-100 text-zinc-700";
+  return (
+    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${style}`}>
+      {status}
     </span>
   );
 }

@@ -25,6 +25,15 @@ async function seedWorkflowRules() {
   await upsertGlobalRule("Alert on coolstore temperature excursion", "COOLSTORE_TEMP_ALERT", [
     { action: "notifyCoolstoreAlert" },
   ]);
+  await upsertGlobalRule("Notify on material order submitted", "MATERIAL_ORDER_SUBMITTED", [
+    { action: "notifyMaterialOrderUpdate" },
+  ]);
+  await upsertGlobalRule("Notify on material order confirmed", "MATERIAL_ORDER_CONFIRMED", [
+    { action: "notifyMaterialOrderUpdate" },
+  ]);
+  await upsertGlobalRule("Notify on material order delivered", "MATERIAL_ORDER_DELIVERED", [
+    { action: "notifyMaterialOrderUpdate" },
+  ]);
 }
 
 /** Demo dataset for local evaluation only — skipped if any organization already exists. */
@@ -209,6 +218,39 @@ async function seedDemoData() {
       createdById: growerOwner.id,
       statusHistory: { create: [{ toStatus: "NEW", changedById: growerOwner.id }] },
     },
+  });
+
+  const fertiliserSupplier = await prisma.supplier.create({
+    data: {
+      organizationId: grower.id,
+      name: "BOP Fert & Ag Supplies",
+      category: "FERTILISER",
+      contactName: "Dave Coulter",
+      phone: "07 555 0199",
+      email: "orders@bopfert.example",
+    },
+  });
+
+  const materialOrder = await prisma.materialOrder.create({
+    data: {
+      organizationId: grower.id,
+      supplierId: fertiliserSupplier.id,
+      orchardId: orchardA.id,
+      status: "SUBMITTED",
+      requestedDeliveryDate: inDays(4),
+      createdById: growerOwner.id,
+      subtotal: 850,
+      items: {
+        create: [
+          { description: "Foliar zinc spray", quantity: 4, unit: "bag", unitPrice: 125, amount: 500 },
+          { description: "Boron granular", quantity: 2, unit: "bag", unitPrice: 175, amount: 350 },
+        ],
+      },
+    },
+  });
+  await emitEvent(grower.id, {
+    type: "MATERIAL_ORDER_SUBMITTED",
+    payload: { materialOrderId: materialOrder.id },
   });
 
   console.log("\nDemo data seeded. Log in with:");

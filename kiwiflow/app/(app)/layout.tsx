@@ -9,6 +9,7 @@ function navForOrgType(orgType: string): { href: string; label: string }[] {
   const common = [
     { href: "/jobs", label: "Jobs" },
     { href: "/invoices", label: "Invoices" },
+    { href: "/materials", label: "Materials" },
     { href: "/settings", label: "Settings" },
   ];
   if (orgType === "GROWER") {

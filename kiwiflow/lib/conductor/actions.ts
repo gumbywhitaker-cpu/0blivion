@@ -54,8 +54,44 @@ async function notifyCoolstoreAlert(ctx: ActionContext): Promise<void> {
   });
 }
 
+async function notifyMaterialOrderUpdate(ctx: ActionContext): Promise<void> {
+  if (
+    ctx.event.type !== "MATERIAL_ORDER_SUBMITTED" &&
+    ctx.event.type !== "MATERIAL_ORDER_CONFIRMED" &&
+    ctx.event.type !== "MATERIAL_ORDER_DELIVERED"
+  ) {
+    return;
+  }
+  const order = await prisma.materialOrder.findUnique({
+    where: { id: ctx.event.payload.materialOrderId },
+    include: { supplier: true },
+  });
+  if (!order) return;
+
+  const verb: Record<typeof ctx.event.type, string> = {
+    MATERIAL_ORDER_SUBMITTED: "submitted to",
+    MATERIAL_ORDER_CONFIRMED: "confirmed by",
+    MATERIAL_ORDER_DELIVERED: "delivered by",
+  };
+
+  const statusLine =
+    ctx.event.type === "MATERIAL_ORDER_DELIVERED"
+      ? "has arrived."
+      : ctx.event.type === "MATERIAL_ORDER_CONFIRMED"
+        ? "was confirmed by the supplier."
+        : "was submitted and is awaiting confirmation.";
+
+  await notifyOrgOwners({
+    organizationId: ctx.organizationId,
+    title: `Material order ${verb[ctx.event.type]} ${order.supplier.name}`,
+    body: `Your $${order.subtotal.toFixed(2)} order from ${order.supplier.name} ${statusLine}`,
+    urgency: "NORMAL",
+  });
+}
+
 export const ACTIONS: Record<string, ActionFn> = {
   createInvoiceDraft,
   notifyOwners,
   notifyCoolstoreAlert,
+  notifyMaterialOrderUpdate,
 };
