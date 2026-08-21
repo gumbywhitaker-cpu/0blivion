@@ -225,6 +225,24 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   border-left:2px solid var(--crimson);padding-left:14px;margin-bottom:18px;max-width:60ch}
 
 /* ---------- live ops cards ---------- */
+.icon-badge{position:relative;width:46px;height:46px;display:flex;align-items:center;justify-content:center;
+  margin-bottom:14px;color:var(--ember)}
+.icon-badge::before{content:"";position:absolute;inset:-8px;border-radius:50%;
+  background:radial-gradient(circle,rgba(209,0,0,.24),transparent 70%);pointer-events:none}
+.icon-badge svg{position:relative;width:100%;height:100%;filter:drop-shadow(0 0 5px rgba(255,42,26,.5))}
+.icon-badge i{position:absolute;width:7px;height:7px;border-color:rgba(255,42,26,.6);border-style:solid;border-width:0;pointer-events:none}
+.icon-badge i.tl{top:-5px;left:-5px;border-top-width:1px;border-left-width:1px}
+.icon-badge i.tr{top:-5px;right:-5px;border-top-width:1px;border-right-width:1px}
+.icon-badge i.bl{bottom:-5px;left:-5px;border-bottom-width:1px;border-left-width:1px}
+.icon-badge i.brc{bottom:-5px;right:-5px;border-bottom-width:1px;border-right-width:1px}
+.icon-badge.small{width:34px;height:34px;margin-bottom:0}
+.pv-h-row{display:flex;align-items:center;gap:16px;margin-bottom:2px}
+.pv-h-row .icon-badge{margin-bottom:0}
+.tint-bronze{color:#c97a3d}
+.tint-silver{color:#c7ccd1}
+.tint-gold{color:#e8c15a}
+.product .icon-badge{margin-bottom:10px}
+
 .card-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px}
 .card{border:1px solid #201417;background:rgba(255,255,255,.02);padding:18px}
 .card-k{font-family:var(--mono);font-size:9.5px;letter-spacing:.3em;color:var(--blood);margin-bottom:12px}
@@ -347,28 +365,35 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
   <div class="pv-body" id="pvBody">
 
     <section class="pv-panel" data-panel="ops" role="tabpanel">
-      <h2 class="pv-h">LIVE OPS</h2>
+      <div class="pv-h-row">
+        <div class="icon-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="21" x2="12" y2="10.5"/><path d="M9 10.5L12 3l3 7.5"/><path d="M8 14.5a5.7 5.7 0 0 1 8 0"/><path d="M5.3 17.7a9.6 9.6 0 0 1 13.4 0"/></svg><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="brc"></i></div>
+        <h2 class="pv-h">LIVE OPS</h2>
+      </div>
       <p class="pv-sub">Real-time signal from the bunker. Nothing here is staged.</p>
       <div class="card-grid" id="opsGrid">
         <article class="card" id="cardServer">
+          <div class="icon-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3.5" width="16" height="5" rx="1"/><rect x="4" y="10" width="16" height="5" rx="1"/><rect x="4" y="16.5" width="16" height="4" rx="1"/><line x1="6.5" y1="6" x2="12" y2="6"/><line x1="6.5" y1="12.5" x2="12" y2="12.5"/><line x1="6.5" y1="18.5" x2="12" y2="18.5"/><circle cx="16.5" cy="6" r="1" fill="currentColor" stroke="none"/><circle cx="16.5" cy="12.5" r="1" fill="currentColor" stroke="none"/><circle cx="16.5" cy="18.5" r="1" fill="currentColor" stroke="none"/></svg><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="brc"></i></div>
           <div class="card-k">SERVER STATUS</div>
           <div class="card-body" data-state="loading">
             <div class="skel"></div><div class="skel w60"></div>
           </div>
         </article>
         <article class="card" id="cardDiscord">
+          <div class="icon-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 13.5a7.5 7.5 0 0 1 15 0"/><rect x="3" y="13" width="4" height="6.5" rx="1.6"/><rect x="17" y="13" width="4" height="6.5" rx="1.6"/><path d="M7 19.5v.8a3 3 0 0 0 3 3h1.2"/></svg><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="brc"></i></div>
           <div class="card-k">DISCORD</div>
           <div class="card-body" data-state="loading">
             <div class="skel"></div><div class="skel w60"></div>
           </div>
         </article>
         <article class="card" id="cardNews">
+          <div class="icon-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="21" x2="12" y2="10.5"/><path d="M9 10.5L12 3l3 7.5"/><path d="M8 14.5a5.7 5.7 0 0 1 8 0"/><path d="M5.3 17.7a9.6 9.6 0 0 1 13.4 0"/></svg><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="brc"></i></div>
           <div class="card-k">RUST INTEL</div>
           <div class="card-body" data-state="loading">
             <div class="skel"></div><div class="skel w60"></div>
           </div>
         </article>
         <article class="card" id="cardWipe">
+          <div class="icon-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3.2h12"/><path d="M6 20.8h12"/><path d="M7 3.2c0 5 4 6.6 5 8 1-1.4 5-3 5-8"/><path d="M7 20.8c0-5 4-6.6 5-8 1 1.4 5 3 5 8"/><circle cx="12" cy="16.6" r="0.9" fill="currentColor" stroke="none"/></svg><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="brc"></i></div>
           <div class="card-k">NEXT WIPE</div>
           <div class="card-body"></div>
         </article>
@@ -376,19 +401,28 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
     </section>
 
     <section class="pv-panel" data-panel="store" role="tabpanel">
-      <h2 class="pv-h">STORE</h2>
+      <div class="pv-h-row">
+        <div class="icon-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 18.5h15l-1.3-7.7-3.9 3-2.3-5.3-2.3 5.3-3.9-3-1.3 7.7z"/><line x1="5" y1="20.3" x2="19" y2="20.3"/><circle cx="12" cy="14.3" r="1.3" fill="currentColor" stroke="none"/></svg><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="brc"></i></div>
+        <h2 class="pv-h">STORE</h2>
+      </div>
       <p class="pv-sub">Support the bunker. All purchases process through our secure store front.</p>
       <div class="store-grid" id="storeGrid"></div>
     </section>
 
     <section class="pv-panel" data-panel="rules" role="tabpanel">
-      <h2 class="pv-h">RULES OF ENGAGEMENT</h2>
+      <div class="pv-h-row">
+        <div class="icon-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.2l6.6 2.8v5.6c0 4.6-2.8 7.5-6.6 8.4-3.8-.9-6.6-3.8-6.6-8.4V6l6.6-2.8z"/><circle cx="12" cy="12" r="2.3"/><line x1="10.4" y1="10.4" x2="13.6" y2="13.6"/></svg><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="brc"></i></div>
+        <h2 class="pv-h">RULES OF ENGAGEMENT</h2>
+      </div>
       <p class="pv-sub">Break these and the sigil comes off.</p>
       <dl class="stats rules-list" id="rulesList"></dl>
     </section>
 
     <section class="pv-panel" data-panel="join" role="tabpanel">
-      <h2 class="pv-h">JOIN THE BUNKER</h2>
+      <div class="pv-h-row">
+        <div class="icon-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9.6" y="12.6" width="4.8" height="8.2" rx="1.2"/><path d="M12 12.6V6.4"/><path d="M9.1 9.4c0-2 1.3-3.4 2.9-5 1.6 1.6 2.9 3 2.9 5"/><path d="M6.6 5c1 .9 1 2 0 2.9"/><path d="M17.4 5c-1 .9-1 2 0 2.9"/></svg><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="brc"></i></div>
+        <h2 class="pv-h">JOIN THE BUNKER</h2>
+      </div>
       <div class="quote">"We don't take players. We take people who hold."</div>
       <p class="pv-text">Applications open the week before wipe. You run two nights with the squad before the sigil is discussed — one raid, one hold. The hold is the part that counts.</p>
       <p class="pv-text">Bring a mic, a schedule you can keep, and no drama from your last clan.</p>
@@ -1041,6 +1075,28 @@ function bootReady(){
 document.getElementById("enterBtn").onclick=()=>enter(true);
 document.getElementById("quietBtn").onclick=()=>enter(false);
 
+/* ================= icon set: hand-drawn line icons, no external assets ================= */
+const ICON_PATHS = {
+  server:'<rect x="4" y="3.5" width="16" height="5" rx="1"/><rect x="4" y="10" width="16" height="5" rx="1"/><rect x="4" y="16.5" width="16" height="4" rx="1"/><line x1="6.5" y1="6" x2="12" y2="6"/><line x1="6.5" y1="12.5" x2="12" y2="12.5"/><line x1="6.5" y1="18.5" x2="12" y2="18.5"/><circle cx="16.5" cy="6" r="1" fill="currentColor" stroke="none"/><circle cx="16.5" cy="12.5" r="1" fill="currentColor" stroke="none"/><circle cx="16.5" cy="18.5" r="1" fill="currentColor" stroke="none"/>',
+  comms:'<path d="M4.5 13.5a7.5 7.5 0 0 1 15 0"/><rect x="3" y="13" width="4" height="6.5" rx="1.6"/><rect x="17" y="13" width="4" height="6.5" rx="1.6"/><path d="M7 19.5v.8a3 3 0 0 0 3 3h1.2"/>',
+  broadcast:'<line x1="12" y1="21" x2="12" y2="10.5"/><path d="M9 10.5L12 3l3 7.5"/><path d="M8 14.5a5.7 5.7 0 0 1 8 0"/><path d="M5.3 17.7a9.6 9.6 0 0 1 13.4 0"/>',
+  hourglass:'<path d="M6 3.2h12"/><path d="M6 20.8h12"/><path d="M7 3.2c0 5 4 6.6 5 8 1-1.4 5-3 5-8"/><path d="M7 20.8c0-5 4-6.6 5-8 1 1.4 5 3 5 8"/><circle cx="12" cy="16.6" r="0.9" fill="currentColor" stroke="none"/>',
+  crown:'<path d="M4.5 18.5h15l-1.3-7.7-3.9 3-2.3-5.3-2.3 5.3-3.9-3-1.3 7.7z"/><line x1="5" y1="20.3" x2="19" y2="20.3"/><circle cx="12" cy="14.3" r="1.3" fill="currentColor" stroke="none"/>',
+  medal:'<circle cx="12" cy="9.6" r="5.6"/><line x1="7.9" y1="13.8" x2="4.6" y2="20.3"/><line x1="16.1" y1="13.8" x2="19.4" y2="20.3"/><circle cx="12" cy="9.6" r="2.3"/><line x1="10.2" y1="7.8" x2="13.8" y2="11.4"/>',
+  mask:'<rect x="5" y="6.3" width="14" height="10.4" rx="4"/><circle cx="9" cy="11" r="2"/><circle cx="15" cy="11" r="2"/><circle cx="9" cy="11" r="0.7" fill="currentColor" stroke="none"/><circle cx="15" cy="11" r="0.7" fill="currentColor" stroke="none"/><rect x="10.6" y="16.7" width="2.8" height="4" rx="1"/>',
+  blueprint:'<rect x="5.5" y="4" width="13" height="16" rx="1"/><circle cx="5.5" cy="4" r="1.4"/><circle cx="5.5" cy="20" r="1.4"/><circle cx="18.5" cy="4" r="1.4"/><circle cx="18.5" cy="20" r="1.4"/><line x1="8.2" y1="9" x2="15.8" y2="9"/><line x1="8.2" y1="12.6" x2="13.6" y2="12.6"/><line x1="8.2" y1="16.2" x2="15.8" y2="16.2"/>',
+  shield:'<path d="M12 3.2l6.6 2.8v5.6c0 4.6-2.8 7.5-6.6 8.4-3.8-.9-6.6-3.8-6.6-8.4V6l6.6-2.8z"/><circle cx="12" cy="12" r="2.3"/><line x1="10.4" y1="10.4" x2="13.6" y2="13.6"/>',
+  flare:'<rect x="9.6" y="12.6" width="4.8" height="8.2" rx="1.2"/><path d="M12 12.6V6.4"/><path d="M9.1 9.4c0-2 1.3-3.4 2.9-5 1.6 1.6 2.9 3 2.9 5"/><path d="M6.6 5c1 .9 1 2 0 2.9"/><path d="M17.4 5c-1 .9-1 2 0 2.9"/>'
+};
+function svgIcon(name,extra){
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" '+
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(ICON_PATHS[name]||"")+'</svg>';
+}
+function iconBadge(name,cls){
+  return '<div class="icon-badge'+(cls?" "+cls:"")+'">'+svgIcon(name)+
+    '<i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="brc"></i></div>';
+}
+
 /* ================= COMMAND DECK: config, live fetchers, store, rules, join ================= */
 const CONFIG = {
   DISCORD_INVITE_URL: "https://discord.gg/YOUR_INVITE",   // EDIT ME
@@ -1052,12 +1108,12 @@ const CONFIG = {
 };
 
 const STORE_ITEMS = [
-  {tag:"FOUNDER",name:"FOUNDER'S KIT",price:"$24.99",desc:"Full starter kit, name colour tag, and permanent Discord role. One-time purchase.",feat:true},
-  {tag:"MEMBERSHIP",name:"VIP — BRONZE",price:"$7.99 / mo",desc:"Queue skip, /kit vip access, 2x extra sleeping bags."},
-  {tag:"MEMBERSHIP",name:"VIP — SILVER",price:"$14.99 / mo",desc:"Everything in Bronze, plus /home teleport and cosmetic skins."},
-  {tag:"MEMBERSHIP",name:"VIP — GOLD",price:"$24.99 / mo",desc:"Everything in Silver, plus priority queue and a monthly blueprint drop."},
-  {tag:"COSMETIC",name:"SIGIL SKIN PACK",price:"$9.99",desc:"Ø-branded weapon and armour skin set for the full loadout."},
-  {tag:"UTILITY",name:"BLUEPRINT UNLOCK",price:"$4.99",desc:"Unlock a single workbench-tier blueprint of your choice."}
+  {tag:"FOUNDER",name:"FOUNDER'S KIT",price:"$24.99",desc:"Full starter kit, name colour tag, and permanent Discord role. One-time purchase.",feat:true,icon:"crown"},
+  {tag:"MEMBERSHIP",name:"VIP — BRONZE",price:"$7.99 / mo",desc:"Queue skip, /kit vip access, 2x extra sleeping bags.",icon:"medal",tint:"tint-bronze"},
+  {tag:"MEMBERSHIP",name:"VIP — SILVER",price:"$14.99 / mo",desc:"Everything in Bronze, plus /home teleport and cosmetic skins.",icon:"medal",tint:"tint-silver"},
+  {tag:"MEMBERSHIP",name:"VIP — GOLD",price:"$24.99 / mo",desc:"Everything in Silver, plus priority queue and a monthly blueprint drop.",icon:"medal",tint:"tint-gold"},
+  {tag:"COSMETIC",name:"SIGIL SKIN PACK",price:"$9.99",desc:"Ø-branded weapon and armour skin set for the full loadout.",icon:"mask"},
+  {tag:"UTILITY",name:"BLUEPRINT UNLOCK",price:"$4.99",desc:"Unlock a single workbench-tier blueprint of your choice.",icon:"blueprint"}
 ];
 
 const RULES_ITEMS = [
@@ -1075,6 +1131,7 @@ function renderStore(){
   const grid=document.getElementById("storeGrid");
   grid.innerHTML=STORE_ITEMS.map(p=>
     '<article class="product'+(p.feat?" feat":"")+'">'+
+      iconBadge(p.icon,p.tint)+
       '<div class="tag">'+p.tag+'</div>'+
       '<h3>'+p.name+'</h3>'+
       '<p>'+p.desc+'</p>'+
