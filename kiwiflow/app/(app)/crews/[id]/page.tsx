@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
@@ -36,8 +37,14 @@ export default async function CrewDetailPage({
           <ul className="divide-y divide-kf-border rounded-lg border border-kf-border bg-kf-card">
             {crew.members.map((m) => (
               <li key={m.id} className="flex items-center justify-between px-4 py-3">
-                <span className="font-medium text-kf-charcoal">{m.name}</span>
-                <span className="text-sm text-kf-muted">{m.phone ?? "—"}</span>
+                <Link href={`/crews/${crew.id}/members/${m.id}`} className="font-medium text-kf-green-600 hover:underline">
+                  {m.name}
+                </Link>
+                <span className="flex items-center gap-3 text-sm text-kf-muted">
+                  {m.isRse ? <span className="rounded bg-kf-green-100 px-2 py-0.5 text-xs font-semibold text-kf-green-700">RSE</span> : null}
+                  <span>{m.employmentType.replace("_", " ")}</span>
+                  <span>{m.phone ?? "—"}</span>
+                </span>
               </li>
             ))}
           </ul>

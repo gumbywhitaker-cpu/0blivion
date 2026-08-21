@@ -7,6 +7,8 @@ import { JobActions } from "./JobActions";
 import { AssignDriverForm, UpdateEtaForm } from "./LogisticsActions";
 import { MaturityTestForm } from "./MaturityTestForm";
 import { SprayDiaryForm } from "./SprayDiaryForm";
+import { BiosecurityInspectionForm } from "./BiosecurityInspectionForm";
+import { BiosecurityRiskBadge } from "@/lib/ui/badges";
 import type { JobStatus } from "@/lib/types";
 
 export default async function JobDetailPage({
@@ -23,7 +25,11 @@ export default async function JobDetailPage({
       OR: [{ growerOrgId: session.organizationId }, { contractorOrgId: session.organizationId }],
     },
     include: {
-      orchard: true,
+      orchard: {
+        include: {
+          biosecurityInspections: { orderBy: { inspectionDate: "desc" }, take: 10, include: { inspectedBy: true } },
+        },
+      },
       growerOrg: true,
       contractorOrg: true,
       crew: true,
@@ -33,6 +39,7 @@ export default async function JobDetailPage({
       invoiceItems: { include: { invoice: true } },
       maturityTests: { orderBy: { testDate: "desc" }, include: { recordedBy: true } },
       sprayEntries: { orderBy: { applicationDate: "desc" }, include: { applicator: true } },
+      gradingResults: true,
     },
   });
   if (!job) notFound();
@@ -210,6 +217,53 @@ export default async function JobDetailPage({
           ) : null}
         </section>
       ) : null}
+
+      {job.jobType === "TRANSPORT" && job.gradingResults.length > 0 ? (
+        <section className="flex flex-col gap-2">
+          <h2 className="text-lg font-semibold text-kf-charcoal">Grading result</h2>
+          {job.gradingResults.map((g) => (
+            <div key={g.id} className="rounded-lg border border-kf-border bg-kf-card p-3 text-sm">
+              <p className="text-kf-charcoal">
+                {g.totalTrayEquivalents} tray equivalents
+                {g.class1Percent != null ? ` · Class 1 ${g.class1Percent}%` : ""}
+                {g.class2Percent != null ? ` · Class 2 ${g.class2Percent}%` : ""}
+                {g.rejectPercent != null ? ` · Reject ${g.rejectPercent}%` : ""}
+                {g.averageBrix != null ? ` · ${g.averageBrix}°Bx` : ""}
+              </p>
+              <p className="text-xs text-kf-muted">
+                Graded {g.gradingDate.toISOString().slice(0, 10)} · manual entry, no sorter integration
+              </p>
+              {g.notes ? <p className="text-kf-muted">{g.notes}</p> : null}
+            </div>
+          ))}
+        </section>
+      ) : null}
+
+      <section className="flex flex-col gap-3">
+        <h2 className="text-lg font-semibold text-kf-charcoal">Biosecurity</h2>
+        <BiosecurityInspectionForm jobId={job.id} orchardId={job.orchardId} />
+        {job.orchard.biosecurityInspections.length > 0 ? (
+          <ul className="flex flex-col gap-2">
+            {job.orchard.biosecurityInspections.map((b) => (
+              <li key={b.id} className="rounded-lg border border-kf-border bg-kf-card p-3 text-sm">
+                <div className="mb-1 flex items-center gap-2">
+                  <BiosecurityRiskBadge riskLevel={b.riskLevel} />
+                  <span className="font-semibold text-kf-charcoal">{b.category.replace("_", " ")}</span>
+                  <span className="text-kf-muted">{b.inspectionDate.toISOString().slice(0, 10)}</span>
+                </div>
+                <p className="text-kf-charcoal">{b.findings}</p>
+                {b.actionTaken ? <p className="text-kf-muted">Action: {b.actionTaken}</p> : null}
+                {b.followUpRequired ? (
+                  <p className="font-medium text-kf-gold">
+                    Follow-up needed{b.followUpDate ? ` by ${b.followUpDate.toISOString().slice(0, 10)}` : ""}
+                  </p>
+                ) : null}
+                <p className="text-xs text-kf-muted">Inspected by {b.inspectedBy.name}</p>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </section>
 
       <section>
         <h2 className="mb-3 text-lg font-semibold text-kf-charcoal">History</h2>

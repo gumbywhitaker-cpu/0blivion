@@ -9,7 +9,10 @@ import {
   KIWIFRUIT_VARIETIES,
   MATURITY_REFERENCE_THRESHOLDS,
   COOLSTORE_REFERENCE_RANGE_C,
+  BIOSECURITY_CATEGORIES,
+  BIOSECURITY_RISK_LEVELS,
 } from "@/lib/types";
+import { notifyOrgOwners } from "@/lib/notify";
 
 export type FormState = { error?: string } | undefined;
 
@@ -184,4 +187,62 @@ export async function recordCoolstoreLogAction(_prev: FormState, formData: FormD
   }
 
   revalidatePath("/coolstore");
+}
+
+const biosecuritySchema = z.object({
+  jobId: z.string().min(1),
+  orchardId: z.string().min(1),
+  inspectionDate: z.string().min(1),
+  category: z.enum(BIOSECURITY_CATEGORIES),
+  riskLevel: z.enum(BIOSECURITY_RISK_LEVELS),
+  findings: z.string().trim().min(1, "Describe what was found"),
+  actionTaken: z.string().trim().max(1000).optional(),
+  followUpRequired: z.string().optional(),
+  followUpDate: z.string().optional(),
+});
+
+/** Recorded from the job that put someone on the orchard — same access
+ * pattern as spray diary/maturity entries: whichever org (grower or the
+ * contractor doing the work) is party to the job can log a finding. This is
+ * KiwiFlow's own record, not a submission to KVH or any biosecurity
+ * authority. */
+export async function recordBiosecurityInspectionAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const session = await requireSession();
+  const parsed = biosecuritySchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  }
+  const data = parsed.data;
+
+  const job = await assertOnJob(data.jobId, session.organizationId).catch(() => null);
+  if (!job) return { error: "Job not found" };
+
+  const followUpRequired = data.followUpRequired === "on";
+  const followUpDate = followUpRequired && data.followUpDate ? new Date(data.followUpDate) : null;
+
+  await prisma.biosecurityInspection.create({
+    data: {
+      orchardId: data.orchardId,
+      inspectionDate: new Date(data.inspectionDate),
+      category: data.category,
+      riskLevel: data.riskLevel,
+      findings: data.findings,
+      actionTaken: data.actionTaken || null,
+      followUpRequired,
+      followUpDate,
+      inspectedById: session.userId,
+    },
+  });
+
+  if (data.riskLevel === "HIGH") {
+    await notifyOrgOwners({
+      organizationId: job.growerOrgId,
+      title: `High-risk biosecurity finding: ${data.category}`,
+      body: data.findings,
+      urgency: "URGENT",
+    });
+  }
+
+  revalidatePath(`/jobs/${data.jobId}`);
+  revalidatePath("/biosecurity");
 }

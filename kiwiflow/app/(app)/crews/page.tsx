@@ -23,12 +23,20 @@ export default async function CrewsPage() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-kf-charcoal">Crews</h1>
-        <Link
-          href="/crews/new"
-          className="btn rounded-md bg-kf-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-kf-green-700"
-        >
-          + New crew
-        </Link>
+        <div className="flex items-center gap-3">
+          <a
+            href="/api/v1/export/payroll.csv"
+            className="text-sm font-medium text-kf-green-600 hover:underline"
+          >
+            Export payroll CSV
+          </a>
+          <Link
+            href="/crews/new"
+            className="btn rounded-md bg-kf-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-kf-green-700"
+          >
+            + New crew
+          </Link>
+        </div>
       </div>
 
       {crews.length === 0 ? (

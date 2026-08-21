@@ -1,4 +1,11 @@
-import type { JobStatus, JobPriority, InvoiceStatus, NotificationUrgency, MaterialOrderStatus } from "@/lib/types";
+import type {
+  JobStatus,
+  JobPriority,
+  InvoiceStatus,
+  NotificationUrgency,
+  MaterialOrderStatus,
+  BiosecurityRiskLevel,
+} from "@/lib/types";
 
 const JOB_STATUS_STYLE: Record<JobStatus, string> = {
   NEW: "bg-zinc-100 text-zinc-700",
@@ -80,6 +87,21 @@ export function MaterialOrderStatusBadge({ status }: { status: string }) {
   return (
     <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${style}`}>
       {status}
+    </span>
+  );
+}
+
+const BIOSECURITY_RISK_STYLE: Record<BiosecurityRiskLevel, string> = {
+  LOW: "bg-kf-green-100 text-kf-green-700",
+  MEDIUM: "bg-kf-gold/20 text-kf-gold",
+  HIGH: "bg-kf-red/10 text-kf-red",
+};
+
+export function BiosecurityRiskBadge({ riskLevel }: { riskLevel: string }) {
+  const style = BIOSECURITY_RISK_STYLE[riskLevel as BiosecurityRiskLevel] ?? "bg-zinc-100 text-zinc-700";
+  return (
+    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${style}`}>
+      {riskLevel}
     </span>
   );
 }

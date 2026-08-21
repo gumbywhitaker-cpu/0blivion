@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
-import { JobStatusBadge } from "@/lib/ui/badges";
+import { JobStatusBadge, BiosecurityRiskBadge } from "@/lib/ui/badges";
 
 export default async function OrchardDetailPage({
   params,
@@ -14,7 +14,10 @@ export default async function OrchardDetailPage({
 
   const orchard = await prisma.orchard.findFirst({
     where: { id, organizationId: session.organizationId },
-    include: { jobs: { orderBy: { scheduledDate: "desc" }, take: 20 } },
+    include: {
+      jobs: { orderBy: { scheduledDate: "desc" }, take: 20 },
+      biosecurityInspections: { orderBy: { inspectionDate: "desc" }, take: 10 },
+    },
   });
   if (!orchard) notFound();
 
@@ -71,6 +74,29 @@ export default async function OrchardDetailPage({
           </table>
         </div>
       )}
+
+      {orchard.biosecurityInspections.length > 0 ? (
+        <section>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-kf-charcoal">Biosecurity findings</h2>
+            <Link href="/biosecurity" className="text-sm font-medium text-kf-green-600 hover:underline">
+              View all orchards
+            </Link>
+          </div>
+          <ul className="flex flex-col gap-2">
+            {orchard.biosecurityInspections.map((b) => (
+              <li key={b.id} className="rounded-lg border border-kf-border bg-kf-card p-3 text-sm">
+                <div className="mb-1 flex items-center gap-2">
+                  <BiosecurityRiskBadge riskLevel={b.riskLevel} />
+                  <span className="font-semibold text-kf-charcoal">{b.category.replace("_", " ")}</span>
+                  <span className="text-kf-muted">{b.inspectionDate.toISOString().slice(0, 10)}</span>
+                </div>
+                <p className="text-kf-charcoal">{b.findings}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </div>
   );
 }

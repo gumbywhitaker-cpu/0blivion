@@ -55,40 +55,43 @@ model Organization {
   materialOrders           MaterialOrder[]
   broadcastsSent           Broadcast[]               @relation("BroadcastSender")
   broadcastsReceived       BroadcastRecipient[]      @relation("BroadcastRecipientOrg")
+  gradingResultsRecorded   GradingResult[]
 
   @@index([type])
 }
 
 model User {
-  id             String       @id @default(cuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  name           String
-  email          String       @unique
-  passwordHash   String
-  role           String // OWNER | MANAGER | FIELD | DRIVER | VIEWER
-  phone          String?
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name            String
+  email           String       @unique
+  passwordHash    String
+  role            String // OWNER | MANAGER | FIELD | DRIVER | VIEWER
+  phone           String?
   // TOTP MFA (docs/BLUEPRINT.md Section 25). totpSecret is set as soon as setup
   // starts but totpEnabled stays false until the user proves their authenticator
   // app actually works by submitting one correct code — never flip this on
   // unconfirmed, or a typo'd QR scan permanently locks someone out.
-  totpSecret       String?
-  totpEnabled      Boolean  @default(false)
-  totpBackupCodes  String? // JSON array of bcrypt-hashed single-use recovery codes
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  totpSecret      String?
+  totpEnabled     Boolean      @default(false)
+  totpBackupCodes String? // JSON array of bcrypt-hashed single-use recovery codes
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 
-  jobsCreated           Job[]                     @relation("JobCreatedBy")
-  jobsAssignedAsDriver  Job[]                     @relation("JobAssignedDriver")
-  statusChanges         JobStatusHistory[]        @relation("StatusChangedBy")
-  notifications         Notification[]
-  auditLogs             AuditLog[]
-  crewMemberLink        CrewMember?
-  maturityTestsRecorded HarvestMaturityTest[]     @relation("MaturityTestRecordedBy")
-  sprayEntriesRecorded  SprayDiaryEntry[]         @relation("SprayEntryApplicator")
-  coolstoreLogsRecorded CoolstoreTemperatureLog[] @relation("CoolstoreLogRecordedBy")
-  materialOrdersCreated MaterialOrder[]           @relation("MaterialOrderCreatedBy")
-  broadcastsCreated     Broadcast[]               @relation("BroadcastCreatedBy")
+  jobsCreated                    Job[]                     @relation("JobCreatedBy")
+  jobsAssignedAsDriver           Job[]                     @relation("JobAssignedDriver")
+  statusChanges                  JobStatusHistory[]        @relation("StatusChangedBy")
+  notifications                  Notification[]
+  auditLogs                      AuditLog[]
+  crewMemberLink                 CrewMember?
+  maturityTestsRecorded          HarvestMaturityTest[]     @relation("MaturityTestRecordedBy")
+  sprayEntriesRecorded           SprayDiaryEntry[]         @relation("SprayEntryApplicator")
+  coolstoreLogsRecorded          CoolstoreTemperatureLog[] @relation("CoolstoreLogRecordedBy")
+  materialOrdersCreated          MaterialOrder[]           @relation("MaterialOrderCreatedBy")
+  broadcastsCreated              Broadcast[]               @relation("BroadcastCreatedBy")
+  biosecurityInspectionsRecorded BiosecurityInspection[]   @relation("BiosecurityInspectionInspector")
+  gradingResultsRecorded         GradingResult[]           @relation("GradingResultRecordedBy")
 
   @@index([organizationId])
 }
@@ -98,10 +101,10 @@ model User {
 // is a single-instance MVP, and a DB table is the honest, no-new-infra way to
 // close the brute-force gap that mattered most: the login form itself had none.
 model LoginAttempt {
-  id          String   @id @default(cuid())
-  email       String
-  succeeded   Boolean
-  createdAt   DateTime @default(now())
+  id        String   @id @default(cuid())
+  email     String
+  succeeded Boolean
+  createdAt DateTime @default(now())
 
   @@index([email, createdAt])
 }
@@ -136,10 +139,11 @@ model Orchard {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
-  jobs           Job[]
-  maturityTests  HarvestMaturityTest[]
-  sprayEntries   SprayDiaryEntry[]
-  materialOrders MaterialOrder[]
+  jobs                   Job[]
+  maturityTests          HarvestMaturityTest[]
+  sprayEntries           SprayDiaryEntry[]
+  materialOrders         MaterialOrder[]
+  biosecurityInspections BiosecurityInspection[]
 
   @@index([organizationId])
 }
@@ -174,14 +178,32 @@ model Crew {
 }
 
 model CrewMember {
-  id        String   @id @default(cuid())
-  crewId    String
-  crew      Crew     @relation(fields: [crewId], references: [id], onDelete: Cascade)
-  name      String
-  phone     String?
-  userId    String?  @unique
-  user      User?    @relation(fields: [userId], references: [id])
+  id     String  @id @default(cuid())
+  crewId String
+  crew   Crew    @relation(fields: [crewId], references: [id], onDelete: Cascade)
+  name   String
+  phone  String?
+  userId String? @unique
+  user   User?   @relation(fields: [userId], references: [id])
+
+  // RSE/seasonal-labour payroll (docs/BLUEPRINT.md Section 22). isRse and
+  // minGuaranteedHoursPerWeek are operator-entered, not derived from any live
+  // Immigration NZ/MBIE feed — the actual RSE minimum-hours guarantee is a
+  // scheme condition tied to each employer's Agreement to Recruit, not a fixed
+  // industry-wide number, so this app can only apply whatever figure the
+  // operator has configured for that worker. lib/payroll.ts flags a rolling
+  // window against this threshold as a heads-up, not a compliance
+  // certification — operators must verify against their own ATR and current
+  // MBIE policy.
+  employmentType            String  @default("HOURLY") // HOURLY | PIECE_RATE | SALARY | MIXED
+  isRse                     Boolean @default(false)
+  hourlyRate                Float?
+  minGuaranteedHoursPerWeek Float?
+
   createdAt DateTime @default(now())
+
+  timeEntries      TimeEntry[]
+  pieceRateRecords PieceRateRecord[]
 
   @@index([crewId])
 }
@@ -230,11 +252,14 @@ model Job {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  statusHistory JobStatusHistory[]
-  invoiceItems  InvoiceItem[]
-  notifications Notification[]
-  maturityTests HarvestMaturityTest[]
-  sprayEntries  SprayDiaryEntry[]
+  statusHistory    JobStatusHistory[]
+  invoiceItems     InvoiceItem[]
+  notifications    Notification[]
+  maturityTests    HarvestMaturityTest[]
+  sprayEntries     SprayDiaryEntry[]
+  timeEntries      TimeEntry[]
+  pieceRateRecords PieceRateRecord[]
+  gradingResults   GradingResult[]
 
   @@index([growerOrgId])
   @@index([contractorOrgId])
@@ -315,6 +340,105 @@ model SprayDiaryEntry {
   @@index([orchardId])
   @@index([jobId])
   @@index([applicationDate])
+}
+
+// ---------------------------------------------------------------------------
+// RSE / seasonal-labour payroll compliance — wage/hours records that stand in
+// for the timesheets and piece-rate dockets a contractor would otherwise keep
+// on paper. See the note on CrewMember for what "compliance" does and doesn't
+// mean here.
+// ---------------------------------------------------------------------------
+
+model TimeEntry {
+  id           String     @id @default(cuid())
+  crewMemberId String
+  crewMember   CrewMember @relation(fields: [crewMemberId], references: [id], onDelete: Cascade)
+  jobId        String?
+  job          Job?       @relation(fields: [jobId], references: [id])
+  clockIn      DateTime
+  clockOut     DateTime?
+  breakMinutes Int        @default(0)
+  notes        String?
+  createdAt    DateTime   @default(now())
+
+  @@index([crewMemberId, clockIn])
+  @@index([jobId])
+}
+
+model PieceRateRecord {
+  id           String     @id @default(cuid())
+  crewMemberId String
+  crewMember   CrewMember @relation(fields: [crewMemberId], references: [id], onDelete: Cascade)
+  jobId        String?
+  job          Job?       @relation(fields: [jobId], references: [id])
+  recordDate   DateTime
+  unit         String // e.g. "bin", "tray", "kg"
+  quantity     Float
+  ratePerUnit  Float
+  amount       Float // quantity * ratePerUnit, snapshotted at entry time
+  notes        String?
+  createdAt    DateTime   @default(now())
+
+  @@index([crewMemberId, recordDate])
+  @@index([jobId])
+}
+
+// ---------------------------------------------------------------------------
+// Psa / biosecurity risk monitoring — orchard-level pest and disease
+// observations, distinct from SprayDiaryEntry (which records treatments
+// applied, not risk found). Modelled after the kind of monitoring form KVH
+// publishes for growers, but this is KiwiFlow's own record, not a submission
+// to KVH or any external biosecurity authority.
+// ---------------------------------------------------------------------------
+
+model BiosecurityInspection {
+  id               String    @id @default(cuid())
+  orchardId        String
+  orchard          Orchard   @relation(fields: [orchardId], references: [id], onDelete: Cascade)
+  inspectionDate   DateTime
+  category         String // PSA | BMSB | OTHER_PEST | OTHER_DISEASE | GENERAL
+  riskLevel        String // LOW | MEDIUM | HIGH
+  findings         String
+  actionTaken      String?
+  followUpRequired Boolean   @default(false)
+  followUpDate     DateTime?
+  inspectedById    String
+  inspectedBy      User      @relation("BiosecurityInspectionInspector", fields: [inspectedById], references: [id])
+  createdAt        DateTime  @default(now())
+
+  @@index([orchardId])
+  @@index([inspectionDate])
+  @@index([riskLevel])
+}
+
+// ---------------------------------------------------------------------------
+// Packhouse grading results — manually entered per delivered load. No sorter
+// (TOMRA or otherwise) integration exists; sourceSystem exists so a future
+// real import can be told apart from what a person typed in.
+// ---------------------------------------------------------------------------
+
+model GradingResult {
+  id                   String       @id @default(cuid())
+  jobId                String
+  job                  Job          @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  organizationId       String // packhouse org recording the result
+  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  gradingDate          DateTime
+  totalTrayEquivalents Float
+  class1Percent        Float?
+  class2Percent        Float?
+  rejectPercent        Float?
+  averageBrix          Float?
+  sizeCurve            String? // JSON-encoded { size: percent } distribution, optional
+  sourceSystem         String       @default("MANUAL") // MANUAL | IMPORTED (no importer exists yet)
+  notes                String?
+  recordedById         String
+  recordedBy           User         @relation("GradingResultRecordedBy", fields: [recordedById], references: [id])
+  createdAt            DateTime     @default(now())
+
+  @@index([jobId])
+  @@index([organizationId])
+  @@index([gradingDate])
 }
 
 model CoolstoreTemperatureLog {

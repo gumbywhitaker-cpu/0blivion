@@ -110,6 +110,25 @@ export const MATURITY_REFERENCE_THRESHOLDS: Record<KiwifruitVariety, { minDryMat
  */
 export const COOLSTORE_REFERENCE_RANGE_C = { min: -1, max: 1 };
 
+export const EMPLOYMENT_TYPES = ["HOURLY", "PIECE_RATE", "SALARY", "MIXED"] as const;
+export type EmploymentType = (typeof EMPLOYMENT_TYPES)[number];
+
+export const BIOSECURITY_CATEGORIES = ["PSA", "BMSB", "OTHER_PEST", "OTHER_DISEASE", "GENERAL"] as const;
+export type BiosecurityCategory = (typeof BIOSECURITY_CATEGORIES)[number];
+
+export const BIOSECURITY_RISK_LEVELS = ["LOW", "MEDIUM", "HIGH"] as const;
+export type BiosecurityRiskLevel = (typeof BIOSECURITY_RISK_LEVELS)[number];
+
+/**
+ * Default rolling-window size for the RSE/seasonal-labour hours check
+ * (lib/payroll.ts). This is a configurable heads-up threshold, not a legal
+ * figure this app asserts — see the CrewMember schema comment. 4 weeks is a
+ * common RSE Agreement-to-Recruit averaging period, but operators must
+ * confirm the actual period and minimum against their own ATR and current
+ * MBIE/Immigration NZ policy.
+ */
+export const PAYROLL_COMPLIANCE_WINDOW_WEEKS = 4;
+
 export type SessionUser = {
   userId: string;
   organizationId: string;

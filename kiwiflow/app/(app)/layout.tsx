@@ -25,6 +25,7 @@ function navForSession(orgType: string, role: string): { href: string; label: st
       { href: "/orchards", label: "Orchards" },
       { href: "/contractors", label: "Contractors" },
       { href: "/broadcasts", label: "Broadcasts" },
+      { href: "/biosecurity", label: "Biosecurity" },
       ...common,
       { href: "/coolstore", label: "Coolstore" },
     ];

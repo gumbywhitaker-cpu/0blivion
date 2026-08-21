@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { JobStatusBadge } from "@/lib/ui/badges";
+import { GradingForm } from "./GradingForm";
 
 // Logistics Bridge, pack house side (docs/BLUEPRINT.md: "What's arriving and
 // when?"). Read-only: a pack house doesn't own these jobs and shouldn't be
@@ -25,7 +26,7 @@ export default async function PackhousePage() {
     // (see lib/invoicing.ts), which has nothing to do with whether the load
     // physically showed up.
     where: { destinationOrgId: session.organizationId, status: { in: ["COMPLETE", "INVOICED"] } },
-    include: { orchard: true, growerOrg: true, assignedDriver: true },
+    include: { orchard: true, growerOrg: true, assignedDriver: true, gradingResults: true },
     orderBy: { updatedAt: "desc" },
     take: 15,
   });
@@ -80,28 +81,47 @@ export default async function PackhousePage() {
       {arrived.length > 0 ? (
         <section>
           <h2 className="mb-3 text-lg font-semibold text-kf-charcoal">Recently arrived</h2>
-          <div className="overflow-x-auto rounded-lg border border-kf-border bg-kf-card">
-            <table className="w-full min-w-[600px] text-left text-sm">
-              <thead className="border-b border-kf-border text-xs uppercase text-kf-muted">
-                <tr>
-                  <th className="px-4 py-3">From</th>
-                  <th className="px-4 py-3">Load</th>
-                  <th className="px-4 py-3">Driver</th>
-                </tr>
-              </thead>
-              <tbody>
-                {arrived.map((job) => (
-                  <tr key={job.id} className="border-b border-kf-border last:border-0">
-                    <td className="px-4 py-3 font-medium text-kf-charcoal">
+          <ul className="flex flex-col gap-3">
+            {arrived.map((job) => {
+              const grading = job.gradingResults[0];
+              return (
+                <li key={job.id} className="rounded-lg border border-kf-border bg-kf-card p-4">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="font-medium text-kf-charcoal">
                       {job.orchard.name} ({job.growerOrg.name})
-                    </td>
-                    <td className="px-4 py-3">{job.loadDescription ?? "—"}</td>
-                    <td className="px-4 py-3">{job.assignedDriver?.name ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    </span>
+                    <span className="text-sm text-kf-muted">{job.assignedDriver?.name ?? "—"}</span>
+                  </div>
+                  <p className="mb-2 text-sm text-kf-muted">{job.loadDescription ?? "—"}</p>
+                  {grading ? (
+                    <p className="mb-2 text-sm text-kf-charcoal">
+                      Graded: {grading.totalTrayEquivalents} TE
+                      {grading.class1Percent != null ? ` · Class 1 ${grading.class1Percent}%` : ""}
+                      {grading.class2Percent != null ? ` · Class 2 ${grading.class2Percent}%` : ""}
+                      {grading.rejectPercent != null ? ` · Reject ${grading.rejectPercent}%` : ""}
+                      {grading.averageBrix != null ? ` · ${grading.averageBrix}°Bx` : ""}
+                    </p>
+                  ) : null}
+                  <GradingForm
+                    jobId={job.id}
+                    existing={
+                      grading
+                        ? {
+                            gradingDate: grading.gradingDate.toISOString().slice(0, 10),
+                            totalTrayEquivalents: grading.totalTrayEquivalents,
+                            class1Percent: grading.class1Percent,
+                            class2Percent: grading.class2Percent,
+                            rejectPercent: grading.rejectPercent,
+                            averageBrix: grading.averageBrix,
+                            notes: grading.notes,
+                          }
+                        : undefined
+                    }
+                  />
+                </li>
+              );
+            })}
+          </ul>
         </section>
       ) : null}
     </div>
