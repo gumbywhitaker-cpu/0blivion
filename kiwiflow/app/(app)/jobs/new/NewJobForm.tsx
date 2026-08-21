@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { createJobAction, type FormState } from "../actions";
 import { JOB_TYPES, JOB_PRIORITIES } from "@/lib/types";
 
@@ -9,13 +9,16 @@ type Option = { id: string; name: string };
 export function NewJobForm({
   orchards,
   contractors,
+  packhouses,
   defaultOrchardId,
 }: {
   orchards: Option[];
   contractors: Option[];
+  packhouses: Option[];
   defaultOrchardId?: string;
 }) {
   const [state, action, pending] = useActionState<FormState, FormData>(createJobAction, undefined);
+  const [jobType, setJobType] = useState("HARVEST");
 
   return (
     <form action={action} className="flex max-w-lg flex-col gap-4">
@@ -50,6 +53,7 @@ export function NewJobForm({
           name="jobType"
           required
           defaultValue="HARVEST"
+          onChange={(e) => setJobType(e.target.value)}
           className="rounded-md border border-kf-border bg-white px-3 py-2 text-base outline-none focus:border-kf-green-600"
         >
           {JOB_TYPES.map((t) => (
@@ -59,6 +63,40 @@ export function NewJobForm({
           ))}
         </select>
       </div>
+
+      {jobType === "TRANSPORT" ? (
+        <>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="destinationOrgId" className="text-sm font-medium text-kf-charcoal">
+              Destination pack house
+            </label>
+            <select
+              id="destinationOrgId"
+              name="destinationOrgId"
+              defaultValue=""
+              className="rounded-md border border-kf-border bg-white px-3 py-2 text-base outline-none focus:border-kf-green-600"
+            >
+              <option value="">Not set</option>
+              {packhouses.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="loadDescription" className="text-sm font-medium text-kf-charcoal">
+              Load
+            </label>
+            <input
+              id="loadDescription"
+              name="loadDescription"
+              placeholder="e.g. 40 bins Hayward"
+              className="rounded-md border border-kf-border bg-white px-3 py-2 text-base outline-none focus:border-kf-green-600"
+            />
+          </div>
+        </>
+      ) : null}
 
       <div className="flex flex-col gap-1">
         <label htmlFor="contractorOrgId" className="text-sm font-medium text-kf-charcoal">

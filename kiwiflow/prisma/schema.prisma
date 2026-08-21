@@ -39,6 +39,7 @@ model Organization {
   crews                    Crew[]
   jobsAsGrower             Job[]                     @relation("GrowerJobs")
   jobsAsContractor         Job[]                     @relation("ContractorJobs")
+  jobsAsDestination        Job[]                     @relation("JobDestination")
   invoicesIssued           Invoice[]                 @relation("InvoiceFrom")
   invoicesReceived         Invoice[]                 @relation("InvoiceTo")
   notifications            Notification[]
@@ -52,6 +53,8 @@ model Organization {
   coolstoreTemperatureLogs CoolstoreTemperatureLog[]
   suppliers                Supplier[]
   materialOrders           MaterialOrder[]
+  broadcastsSent           Broadcast[]               @relation("BroadcastSender")
+  broadcastsReceived       BroadcastRecipient[]      @relation("BroadcastRecipientOrg")
 
   @@index([type])
 }
@@ -76,6 +79,7 @@ model User {
   updatedAt      DateTime     @updatedAt
 
   jobsCreated           Job[]                     @relation("JobCreatedBy")
+  jobsAssignedAsDriver  Job[]                     @relation("JobAssignedDriver")
   statusChanges         JobStatusHistory[]        @relation("StatusChangedBy")
   notifications         Notification[]
   auditLogs             AuditLog[]
@@ -84,6 +88,7 @@ model User {
   sprayEntriesRecorded  SprayDiaryEntry[]         @relation("SprayEntryApplicator")
   coolstoreLogsRecorded CoolstoreTemperatureLog[] @relation("CoolstoreLogRecordedBy")
   materialOrdersCreated MaterialOrder[]           @relation("MaterialOrderCreatedBy")
+  broadcastsCreated     Broadcast[]               @relation("BroadcastCreatedBy")
 
   @@index([organizationId])
 }
@@ -207,6 +212,18 @@ model Job {
   rate     Float? // $ per unit
   unit     String? // e.g. "hour", "bin", "hectare"
   quantity Float? // captured at completion
+
+  // Logistics Bridge (docs/BLUEPRINT.md: "Driver — where am I going and what
+  // happens next?", "Pack House — what's arriving and when?"). Only meaningful
+  // for jobType=TRANSPORT — deliberately kept on Job rather than a parallel
+  // Delivery model, since a transport run already IS a job with the same
+  // status machine (NEW..COMPLETE) a delivery lifecycle needs.
+  destinationOrgId String? // receiving org, typically a PACKHOUSE
+  destinationOrg   Organization? @relation("JobDestination", fields: [destinationOrgId], references: [id])
+  assignedDriverId String? // a User with role=DRIVER
+  assignedDriver   User?         @relation("JobAssignedDriver", fields: [assignedDriverId], references: [id])
+  loadDescription  String? // e.g. "40 bins Hayward"
+  etaAt            DateTime? // live estimate the driver updates en route, distinct from the static scheduledDate/startTime
 
   createdById String
   createdBy   User     @relation("JobCreatedBy", fields: [createdById], references: [id])
@@ -534,4 +551,43 @@ model MaterialOrderItem {
   amount          Float // quantity * unitPrice, snapshotted at line-add time
 
   @@index([materialOrderId])
+}
+
+// ---------------------------------------------------------------------------
+// Mass Broadcasting — a grower sending one message to some/all of their
+// linked contractors ("spray window closing in 2 hours, all crews please
+// note"). v1 is deliberately one-directional (GROWER -> its ACTIVE
+// ContractorLink orgs): that's the actual "mass" use case in this industry —
+// a contractor broadcasting to growers isn't, since each contractor only has
+// one grower per job relationship they'd already message directly.
+// ---------------------------------------------------------------------------
+
+model Broadcast {
+  id             String       @id @default(cuid())
+  organizationId String // sender org
+  organization   Organization @relation("BroadcastSender", fields: [organizationId], references: [id], onDelete: Cascade)
+  createdById    String
+  createdBy      User         @relation("BroadcastCreatedBy", fields: [createdById], references: [id])
+  title          String
+  body           String
+  urgency        String       @default("NORMAL") // NORMAL|URGENT|CRITICAL — same channel fan-out as Notification
+  createdAt      DateTime     @default(now())
+
+  recipients BroadcastRecipient[]
+
+  @@index([organizationId])
+}
+
+// One row per recipient org — lets the compose UI show real delivery/read
+// counts per broadcast instead of a single opaque "sent" state.
+model BroadcastRecipient {
+  id             String       @id @default(cuid())
+  broadcastId    String
+  broadcast      Broadcast    @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization @relation("BroadcastRecipientOrg", fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  @@unique([broadcastId, organizationId])
+  @@index([organizationId])
 }

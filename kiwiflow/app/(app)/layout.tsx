@@ -5,7 +5,13 @@ import { requireSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { logoutAction } from "../(auth)/actions";
 
-function navForOrgType(orgType: string): { href: string; label: string }[] {
+function navForSession(orgType: string, role: string): { href: string; label: string }[] {
+  // Role checked first: a DRIVER's nav is the same regardless of whether
+  // their org is CONTRACTOR or TRANSPORT — orgType alone can't decide it.
+  if (role === "DRIVER") {
+    return [{ href: "/driver", label: "Deliveries" }, { href: "/settings", label: "Settings" }];
+  }
+
   const common = [
     { href: "/jobs", label: "Jobs" },
     { href: "/invoices", label: "Invoices" },
@@ -17,6 +23,7 @@ function navForOrgType(orgType: string): { href: string; label: string }[] {
       { href: "/grower", label: "Command Center" },
       { href: "/orchards", label: "Orchards" },
       { href: "/contractors", label: "Contractors" },
+      { href: "/broadcasts", label: "Broadcasts" },
       ...common,
       { href: "/coolstore", label: "Coolstore" },
     ];
@@ -25,11 +32,12 @@ function navForOrgType(orgType: string): { href: string; label: string }[] {
     return [
       { href: "/contractor", label: "Contractor Hub" },
       { href: "/crews", label: "Crews" },
+      { href: "/broadcasts", label: "Broadcasts" },
       ...common,
     ];
   }
   if (orgType === "PACKHOUSE") {
-    return [{ href: "/coolstore", label: "Coolstore" }, ...common];
+    return [{ href: "/packhouse", label: "Incoming" }, { href: "/coolstore", label: "Coolstore" }, ...common];
   }
   if (orgType === "ADMIN") {
     return [{ href: "/admin", label: "Platform Admin" }];
@@ -42,7 +50,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const unreadCount = await prisma.notification.count({
     where: { userId: session.userId, read: false },
   });
-  const navLinks = navForOrgType(session.orgType);
+  const navLinks = navForSession(session.orgType, session.role);
 
   return (
     <div className="flex min-h-screen flex-col bg-background">

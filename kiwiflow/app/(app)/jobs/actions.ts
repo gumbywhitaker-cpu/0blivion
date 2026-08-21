@@ -7,6 +7,8 @@ import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/auth/session";
 import { assertCanManage, canManage } from "@/lib/auth/requireRole";
 import { emitEvent } from "@/lib/conductor/emit";
+import { notifyOrg } from "@/lib/notify";
+import { recordAuditLog } from "@/lib/audit";
 import { JOB_STATUS_TRANSITIONS, JOB_TYPES, JOB_PRIORITIES, type JobStatus } from "@/lib/types";
 import type { SessionUser } from "@/lib/types";
 
@@ -23,6 +25,10 @@ const createJobSchema = z.object({
   instructions: z.string().trim().max(2000).optional(),
   rate: z.string().optional(),
   unit: z.string().trim().max(50).optional(),
+  // Logistics Bridge (only meaningful for jobType=TRANSPORT — validated below,
+  // not in the schema itself, since a HARVEST job legitimately omits both).
+  destinationOrgId: z.string().optional(),
+  loadDescription: z.string().trim().max(500).optional(),
 });
 
 export async function createJobAction(_prev: FormState, formData: FormData): Promise<FormState> {
@@ -58,6 +64,15 @@ export async function createJobAction(_prev: FormState, formData: FormData): Pro
     }
   }
 
+  let destinationOrgId: string | null = null;
+  if (data.jobType === "TRANSPORT" && data.destinationOrgId) {
+    const destination = await prisma.organization.findFirst({
+      where: { id: data.destinationOrgId, type: "PACKHOUSE" },
+    });
+    if (!destination) return { error: "Destination pack house not found" };
+    destinationOrgId = destination.id;
+  }
+
   const status: JobStatus = data.contractorOrgId ? "SCHEDULED" : "NEW";
   const rate = data.rate ? Number.parseFloat(data.rate) : NaN;
   const durationMins = data.estimatedDurationMins ? Number.parseInt(data.estimatedDurationMins, 10) : NaN;
@@ -76,6 +91,8 @@ export async function createJobAction(_prev: FormState, formData: FormData): Pro
       instructions: data.instructions || null,
       rate: Number.isFinite(rate) ? rate : null,
       unit: data.unit || null,
+      destinationOrgId,
+      loadDescription: data.jobType === "TRANSPORT" ? data.loadDescription || null : null,
       createdById: session.userId,
       statusHistory: {
         create: [{ toStatus: status, changedById: session.userId }],
@@ -217,5 +234,106 @@ export async function transitionJobAction(_prev: FormState, formData: FormData):
     await emitEvent(job.growerOrgId, { type: "JOB_COMPLETED", payload: { jobId: job.id } });
   }
 
+  // Logistics Bridge: the destination pack house has no other way to learn a
+  // delivery is now on the road or has arrived — it isn't the grower or the
+  // contractor org on this job, so the Conductor's own-org rule engine can't
+  // reach it. A direct notify here, not a WorkflowRule, matches how
+  // notifyMaterialOrderUpdate handles the same kind of narrow cross-org case.
+  if (job.jobType === "TRANSPORT" && job.destinationOrgId && (target === "IN_PROGRESS" || target === "COMPLETE")) {
+    await notifyOrg({
+      organizationId: job.destinationOrgId,
+      title: target === "IN_PROGRESS" ? "Delivery on its way" : "Delivery arrived",
+      body:
+        target === "IN_PROGRESS"
+          ? `${job.loadDescription ?? "A load"} is now in transit${job.etaAt ? `, ETA ${job.etaAt.toISOString().slice(0, 16).replace("T", " ")}` : ""}.`
+          : `${job.loadDescription ?? "A load"} has arrived.`,
+      urgency: "NORMAL",
+      jobId: job.id,
+    });
+  }
+
   revalidatePath(`/jobs/${job.id}`);
+}
+
+const assignDriverSchema = z.object({
+  jobId: z.string().min(1),
+  driverId: z.string().min(1, "Choose a driver"),
+});
+
+/** The contractor/transport org handling a TRANSPORT job assigns one of its
+ * own DRIVER-role users to it — separate from transitionJobAction because
+ * this isn't a status change, and separate from job creation because the
+ * grower who creates the job doesn't know the contractor's driver roster. */
+export async function assignDriverToJobAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const session = await requireSession();
+  assertCanManage(session.role);
+
+  const parsed = assignDriverSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  }
+  const { jobId, driverId } = parsed.data;
+
+  const job = await prisma.job.findFirst({
+    where: { id: jobId, contractorOrgId: session.organizationId, jobType: "TRANSPORT" },
+  });
+  if (!job) return { error: "Job not found" };
+
+  const driver = await prisma.user.findFirst({
+    where: { id: driverId, organizationId: session.organizationId, role: "DRIVER" },
+  });
+  if (!driver) return { error: "That driver isn't part of your organisation" };
+
+  await prisma.job.update({ where: { id: job.id }, data: { assignedDriverId: driver.id } });
+
+  await recordAuditLog({
+    organizationId: session.organizationId,
+    actorId: session.userId,
+    action: "job.driver_assigned",
+    entityType: "Job",
+    entityId: job.id,
+    detail: { driverId: driver.id },
+  });
+
+  revalidatePath(`/jobs/${job.id}`);
+  revalidatePath("/driver");
+}
+
+const updateEtaSchema = z.object({
+  jobId: z.string().min(1),
+  etaAt: z.string().min(1, "Enter an ETA"),
+});
+
+/** The assigned driver updates a live ETA while en route — distinct from the
+ * static scheduledDate/startTime set at booking time. Notifies the
+ * destination pack house immediately, since that's the whole point of
+ * "what's arriving and when" (docs/BLUEPRINT.md). */
+export async function updateEtaAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const session = await requireSession();
+  const parsed = updateEtaSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  }
+  const { jobId, etaAt } = parsed.data;
+
+  const job = await prisma.job.findFirst({ where: { id: jobId, assignedDriverId: session.userId } });
+  if (!job) return { error: "Job not found" };
+
+  const eta = new Date(etaAt);
+  if (Number.isNaN(eta.getTime())) return { error: "Invalid ETA" };
+
+  await prisma.job.update({ where: { id: job.id }, data: { etaAt: eta } });
+
+  if (job.destinationOrgId) {
+    await notifyOrg({
+      organizationId: job.destinationOrgId,
+      title: "Delivery ETA updated",
+      body: `${job.loadDescription ?? "A load"} now expected ${eta.toISOString().slice(0, 16).replace("T", " ")}.`,
+      urgency: "NORMAL",
+      jobId: job.id,
+    });
+  }
+
+  revalidatePath("/driver");
+  revalidatePath("/packhouse");
 }

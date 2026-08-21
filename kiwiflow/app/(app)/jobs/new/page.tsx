@@ -18,12 +18,13 @@ export default async function NewJobPage({
     );
   }
 
-  const [orchards, links] = await Promise.all([
+  const [orchards, links, packhouses] = await Promise.all([
     prisma.orchard.findMany({ where: { organizationId: session.organizationId }, orderBy: { name: "asc" } }),
     prisma.contractorLink.findMany({
       where: { growerOrgId: session.organizationId, status: "ACTIVE" },
       include: { contractorOrg: true },
     }),
+    prisma.organization.findMany({ where: { type: "PACKHOUSE" }, orderBy: { name: "asc" } }),
   ]);
 
   if (orchards.length === 0) {
@@ -40,6 +41,7 @@ export default async function NewJobPage({
       <NewJobForm
         orchards={orchards.map((o) => ({ id: o.id, name: o.name }))}
         contractors={links.map((l) => ({ id: l.contractorOrgId, name: l.contractorOrg.name }))}
+        packhouses={packhouses.map((p) => ({ id: p.id, name: p.name }))}
         defaultOrchardId={orchardId}
       />
     </div>

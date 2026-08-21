@@ -73,3 +73,23 @@ export async function notifyOrgOwners(params: {
     await notifyUser({ ...params, userId: owner.id });
   }
 }
+
+/**
+ * Notify every user in an org, not just OWNERs — for things meant to reach
+ * everyone who might act on them immediately (a mass broadcast, an incoming
+ * delivery), where waiting for the owner to relay it defeats the point.
+ */
+export async function notifyOrg(params: {
+  organizationId: string;
+  title: string;
+  body: string;
+  urgency?: NotificationUrgency;
+  jobId?: string;
+}): Promise<void> {
+  const users = await prisma.user.findMany({
+    where: { organizationId: params.organizationId },
+  });
+  for (const user of users) {
+    await notifyUser({ ...params, userId: user.id });
+  }
+}

@@ -4,6 +4,7 @@ import { requireSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { JobStatusBadge, PriorityBadge } from "@/lib/ui/badges";
 import { JobActions } from "./JobActions";
+import { AssignDriverForm, UpdateEtaForm } from "./LogisticsActions";
 import { MaturityTestForm } from "./MaturityTestForm";
 import { SprayDiaryForm } from "./SprayDiaryForm";
 import type { JobStatus } from "@/lib/types";
@@ -26,6 +27,8 @@ export default async function JobDetailPage({
       growerOrg: true,
       contractorOrg: true,
       crew: true,
+      destinationOrg: true,
+      assignedDriver: true,
       statusHistory: { orderBy: { changedAt: "asc" }, include: { changedBy: true } },
       invoiceItems: { include: { invoice: true } },
       maturityTests: { orderBy: { testDate: "desc" }, include: { recordedBy: true } },
@@ -42,6 +45,13 @@ export default async function JobDetailPage({
             include: { contractorOrg: true },
           })
         ).map((l) => ({ id: l.contractorOrgId, name: l.contractorOrg.name }))
+      : [];
+
+  const isAssignedDriver = job.assignedDriverId === session.userId;
+  const isContractorOrg = job.contractorOrgId !== null && session.organizationId === job.contractorOrgId;
+  const drivers =
+    job.jobType === "TRANSPORT" && isContractorOrg
+      ? await prisma.user.findMany({ where: { organizationId: session.organizationId, role: "DRIVER" } })
       : [];
 
   const invoice = job.invoiceItems[0]?.invoice;
@@ -118,6 +128,36 @@ export default async function JobDetailPage({
           contractors={contractors}
         />
       )}
+
+      {job.jobType === "TRANSPORT" ? (
+        <section className="flex flex-col gap-3">
+          <h2 className="text-lg font-semibold text-kf-charcoal">Logistics</h2>
+          <dl className="grid grid-cols-1 gap-4 rounded-lg border border-kf-border bg-kf-card p-4 sm:grid-cols-2">
+            <div>
+              <dt className="text-xs uppercase text-kf-muted">Destination pack house</dt>
+              <dd className="text-kf-charcoal">{job.destinationOrg?.name ?? "Not set"}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase text-kf-muted">Load</dt>
+              <dd className="text-kf-charcoal">{job.loadDescription ?? "Not set"}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase text-kf-muted">Driver</dt>
+              <dd className="text-kf-charcoal">{job.assignedDriver?.name ?? "Unassigned"}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase text-kf-muted">ETA</dt>
+              <dd className="text-kf-charcoal">
+                {job.etaAt ? job.etaAt.toISOString().slice(0, 16).replace("T", " ") : "Not set"}
+              </dd>
+            </div>
+          </dl>
+          {isContractorOrg && !job.assignedDriver ? <AssignDriverForm jobId={job.id} drivers={drivers.map((d) => ({ id: d.id, name: d.name }))} /> : null}
+          {isAssignedDriver && ["CONFIRMED", "IN_PROGRESS"].includes(job.status) ? (
+            <UpdateEtaForm jobId={job.id} currentEta={job.etaAt ? job.etaAt.toISOString().slice(0, 16) : null} />
+          ) : null}
+        </section>
+      ) : null}
 
       {job.jobType === "HARVEST" ? (
         <section className="flex flex-col gap-3">
