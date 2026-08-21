@@ -35,7 +35,7 @@ code.
 | Area | Status |
 |---|---|
 | Asset inventory | Implicit in `prisma/schema.prisma` and `docs/BLUEPRINT.md` — every data asset is a documented model, not a formal inventory artifact. |
-| Data classification | Informal. Financial (invoices), compliance (spray diary, maturity tests, coolstore logs), and PII (names/emails/phones) are all identifiable in the schema but not labeled by sensitivity tier anywhere. |
+| Data classification | Informal. Financial (invoices), compliance (spray diary, maturity tests, coolstore logs, biosecurity inspections), wage/hours (`TimeEntry`/`PieceRateRecord` — worker PII plus pay data), and general PII (names/emails/phones) are all identifiable in the schema but not labeled by sensitivity tier anywhere. |
 | Tenant/trust boundary mapping | Documented in `SECURITY.md`: application-layer `organizationId` scoping, not database-enforced RLS (the Hatchable deployment differs — real Postgres RLS there). This is the single most important ID-function gap: it means the boundary depends on every query author remembering to scope it. |
 | Third-party dependency inventory | `package.json` + `.github/dependabot.yml` (repo root) — real, automated, current. |
 
@@ -63,7 +63,7 @@ codebase alone lands here.
 | Domain-event logging | `JobStatusHistory` — a full, timestamped, actor-attributed history independent of `AuditLog`, for the job lifecycle specifically. |
 | Automated vulnerability detection | Dependabot (PROTECT and DETECT overlap here — same control, different lens). |
 | Centralized monitoring / alerting | **Gap.** No SIEM, no anomaly detection, no paging on suspicious activity (e.g. a spike in failed logins is recorded in `LoginAttempt` but nothing currently reads that table proactively). |
-| Anomaly detection | **Gap.** Rate-limit lockouts are a blunt, fixed-threshold control, not adaptive detection. |
+| Anomaly detection | **Gap.** Rate-limit lockouts are a blunt, fixed-threshold control, not adaptive detection. The RSE hours-compliance flag (`lib/payroll.ts`) is the same kind of control applied to a business domain rather than security — a fixed, operator-set threshold checked on page load, not proactive alerting or a legal determination. |
 
 ## RESPOND (RS)
 

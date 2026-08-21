@@ -79,7 +79,12 @@ NIST Cybersecurity Framework (a self-assessed framework, not a certification
 - **Gap**: business-critical mutations outside auth/admin/materials (invoice
   generation, compliance record edits, org settings changes) aren't yet
   writing to this log. Extend `recordAuditLog()` calls to those action files
-  as they come up for review.
+  as they come up for review. This now explicitly includes the three
+  compliance-adjacent features added after the initial build: wage/hours
+  entries (`TimeEntry`/`PieceRateRecord`), biosecurity findings
+  (`BiosecurityInspection`), and packhouse grading results
+  (`GradingResult`) — none of these write to `AuditLog` yet, same gap as
+  spray diary/maturity testing before them.
 
 ## API routes outside the Server Action model
 
@@ -125,6 +130,14 @@ NIST Cybersecurity Framework (a self-assessed framework, not a certification
 
 ## Data handling
 
+- **RSE/seasonal-labour payroll data** (`TimeEntry`, `PieceRateRecord`,
+  and the `CrewMember.minGuaranteedHoursPerWeek` threshold): this is
+  worker PII plus wage data, scoped by the same `organizationId`
+  application-layer filtering as everything else — no separate access
+  control tier for it. The "under threshold" flag `lib/payroll.ts`
+  computes is an operator-configured heads-up, not a legal compliance
+  determination — it must not be presented to a customer or auditor as
+  proof of RSE Agreement-to-Recruit compliance.
 - `AuditLog`, `LoginAttempt`, and `SignupAttempt` retention: currently
   unbounded — no automatic pruning job exists yet. Needed before this can
   be called a real data retention policy.
