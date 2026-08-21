@@ -4,6 +4,7 @@ import { requireSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { JobStatusBadge } from "@/lib/ui/badges";
 import { JOB_STATUSES } from "@/lib/types";
+import { WeatherPanel } from "./WeatherPanel";
 
 function startOfMonth() {
   const d = new Date();
@@ -17,7 +18,7 @@ export default async function GrowerCommandCenterPage() {
   const orgId = session.organizationId;
   const monthStart = startOfMonth();
 
-  const [statusCounts, committedAgg, outstandingAgg, paidAgg, upcomingJobs, recentNotifications, contractorCount] =
+  const [statusCounts, committedAgg, outstandingAgg, paidAgg, upcomingJobs, recentNotifications, contractorCount, firstOrchard] =
     await Promise.all([
       prisma.job.groupBy({ by: ["status"], where: { growerOrgId: orgId }, _count: { _all: true } }),
       prisma.invoice.aggregate({
@@ -44,6 +45,11 @@ export default async function GrowerCommandCenterPage() {
         take: 6,
       }),
       prisma.contractorLink.count({ where: { growerOrgId: orgId, status: "ACTIVE" } }),
+      prisma.orchard.findFirst({
+        where: { organizationId: orgId, region: { not: null } },
+        select: { region: true },
+        orderBy: { createdAt: "asc" },
+      }),
     ]);
 
   const countByStatus = Object.fromEntries(statusCounts.map((s) => [s.status, s._count._all]));
@@ -64,6 +70,8 @@ export default async function GrowerCommandCenterPage() {
         <StatTile label="Outstanding to pay" value={outstandingAgg._sum.total ?? 0} accent="gold" />
         <StatTile label="Paid this month" value={paidAgg._sum.total ?? 0} accent="green" />
       </section>
+
+      <WeatherPanel region={firstOrchard?.region ?? null} />
 
       <section>
         <h2 className="mb-3 text-lg font-semibold text-kf-charcoal">Job pipeline</h2>
