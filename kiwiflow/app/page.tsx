@@ -68,8 +68,19 @@ export default async function Home() {
         </div>
       </main>
 
-      <footer className="mx-auto w-full max-w-5xl px-6 py-6 text-xs text-white/50">
-        KiwiFlow — not affiliated with Zespri Group Limited.
+      <footer className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-3 px-6 py-6 text-xs text-white/50">
+        <span>KiwiFlow — not affiliated with Zespri Group Limited.</span>
+        <nav className="flex gap-4">
+          <Link href="/about" className="hover:text-white/80">
+            About
+          </Link>
+          <Link href="/how-it-works" className="hover:text-white/80">
+            How it works
+          </Link>
+          <Link href="/login" className="hover:text-white/80">
+            Log in
+          </Link>
+        </nav>
       </footer>
     </div>
   );
