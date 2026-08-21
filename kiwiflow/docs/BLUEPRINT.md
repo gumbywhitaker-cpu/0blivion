@@ -285,12 +285,17 @@ scope this document is not going to hand-wave past.
 8. In-app notifications
 9. Job completion → Conductor → invoice draft (automatic)
 10. Basic invoicing (list, detail, printable view, GST)
-11. CSV export (jobs, invoices)
-12. Conductor automation engine (event bus + rule engine, one shipped rule)
+11. CSV export (jobs, invoices, spray diary, maturity tests, material orders)
+12. Conductor automation engine (event bus + rule engine, shipped rules for
+    auto-invoicing, coolstore alerts, and material order status notifications)
+13. Materials Ordering — the 4th data pillar (Section 22)
+14. Live weather (Open-Meteo) on the Grower Command Center, with a spray-window
+    indicator — real API data, fails closed to "unavailable" rather than fabricating
+    numbers if the call fails (Section 0 constraint applied here too)
 
-Explicitly deferred: Logistics Bridge, Materials Ordering, mass broadcasting, AI layer,
-regional heat maps, Zespri oversight engine, offline sync, MFA, rate limiting, Postgres
-RLS, SMS/email/push provider wiring, PDF generation via headless browser (CSV + print-
+Explicitly deferred: Logistics Bridge, mass broadcasting, AI layer, regional heat
+maps, Zespri oversight engine, offline sync, MFA, rate limiting, Postgres RLS,
+SMS/email/push provider wiring, PDF generation via headless browser (CSV + print-
 to-PDF ships instead — see Section 9).
 
 ## 16. Testing / Deployment / Scaling (brief, honest)
@@ -376,6 +381,30 @@ Gate Price statement (grower payment structure spans fruit loss, post-harvest co
 Class 2 income, pool rates, and loyalty/share mechanics that are Zespri's own
 calculation, not KiwiFlow's to restate). Each is a legitimate future scope item; none
 of them were guessed at here.
+
+## 22. Materials Ordering (4th data pillar)
+
+`Supplier` / `MaterialOrder` / `MaterialOrderItem`, following the same status-lifecycle
+pattern as `Job` (`DRAFT → SUBMITTED → CONFIRMED → DELIVERED`, plus `CANCELLED` from any
+pre-`DELIVERED` state), wired into the Conductor exactly like job completion: each
+transition emits an event and a seeded global `WorkflowRule` notifies the ordering org's
+owners.
+
+One deliberate design choice worth calling out: **this does not reuse the `Invoice`
+model**, even though both are "money owed" records. An `Invoice` bills between two
+KiwiFlow organizations (`fromOrg`/`toOrg`, both tenants with their own users and
+sessions); a `Supplier` is an external business with no KiwiFlow account at all — there
+is no second party to bill, confirm, or notify inside the platform. Forcing suppliers
+into the `Organization` model to reuse `Invoice` would have meant fabricating accounts
+for businesses that never signed up, so `Supplier` stays a plain per-org contact record
+instead.
+
+**Honest scope note**: `CONFIRMED` and `DELIVERED` are marked by the ordering org's own
+staff (e.g. after a phone call or when the truck arrives), not verified against any real
+supplier system — there is no supplier-side API to confirm against, and none is claimed.
+This mirrors the coolstore log's "no device integration" note in Section 21: a real
+supplier-EDI or ordering-portal integration is a legitimate future `IntegrationAdapter`,
+not something invented here.
 
 **On "everything perfect, nothing missed"**: that standard isn't achievable honestly
 for a domain this broad in one pass, and claiming it would be the same mistake as the
