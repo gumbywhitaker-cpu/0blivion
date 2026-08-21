@@ -1,0 +1,42 @@
+{
+  "name": "kiwiflow-desktop",
+  "version": "1.0.0",
+  "description": "Desktop shortcut to the live KiwiFlow app — opens the real hosted site (kiwiflow.hatchable.site) in a native window. All data is shared/live; this is not a standalone offline copy.",
+  "author": "KiwiFlow",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win --x64"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "nz.kiwiflow.desktop",
+    "productName": "KiwiFlow",
+    "directories": {
+      "output": "dist"
+    },
+    "publish": null,
+    "files": [
+      "main.js",
+      "preload.js",
+      "icon.png"
+    ],
+    "electronLanguages": ["en-US", "en-GB"],
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] }
+      ],
+      "icon": "icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "KiwiFlow"
+    }
+  }
+}
