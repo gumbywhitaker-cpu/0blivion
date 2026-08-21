@@ -292,11 +292,13 @@ scope this document is not going to hand-wave past.
 14. Live weather (Open-Meteo) on the Grower Command Center, with a spray-window
     indicator — real API data, fails closed to "unavailable" rather than fabricating
     numbers if the call fails (Section 0 constraint applied here too)
+15. Platform Admin — read-only cross-org role (Section 23)
+16. Login rate limiting (Section 24)
 
 Explicitly deferred: Logistics Bridge, mass broadcasting, AI layer, regional heat
-maps, Zespri oversight engine, offline sync, MFA, rate limiting, Postgres RLS,
-SMS/email/push provider wiring, PDF generation via headless browser (CSV + print-
-to-PDF ships instead — see Section 9).
+maps, Zespri oversight engine, offline sync, MFA, Postgres RLS, SMS/email/push
+provider wiring, PDF generation via headless browser (CSV + print-to-PDF ships
+instead — see Section 9).
 
 ## 16. Testing / Deployment / Scaling (brief, honest)
 
@@ -445,8 +447,32 @@ user management, no impersonation). Building that surface is a much larger scope
 mutation is another cross-tenant code path to get right. Ship the narrow, correct
 version now; widen deliberately if there's a concrete need, not by default.
 
-**Known gap, stated plainly**: there is no MFA on this build (already listed as
-deferred in Section 15), which matters more for this account than any other — it's the
-single highest-value credential in the system. Rate limiting on login is the same
-pre-existing gap. Both apply to every account, not just this one, but this is the
-account where they matter most.
+**Known gap, stated plainly**: there is no MFA on this build (still listed as deferred
+in Section 15), which matters more for this account than any other — it's the single
+highest-value credential in the system. Login rate limiting (the other gap noted here
+originally) has since shipped — see Section 24 — closing the specific brute-force risk
+that made this account worth calling out in the first place. MFA remains open.
+
+## 24. Login rate limiting
+
+A `LoginAttempt` table (`email`, `succeeded`, `createdAt`) backs a fail-closed lockout:
+5 failed attempts for one email within 15 minutes blocks further attempts for that
+email — including one with the *correct* password, verified by test — until the
+window rolls off. `lib/auth/rateLimit.ts` has the full implementation.
+
+**Deliberately per-email, not per-IP**: this MVP has no reliable client IP source
+without adding proxy-trust configuration, and per-IP limiting would let a shared
+office or NAT lock everyone behind it out together. Locking on email directly
+protects the thing that matters — one specific account being brute-forced — at the
+cost of letting an attacker who already knows a real email temporarily deny that
+one user's own logins. Given account discovery already requires knowing someone's
+email, that's the right trade-off for this build.
+
+**Deliberately DB-backed, not a distributed cache**: this is a single-instance MVP
+(Section 16), so a Postgres/SQLite table is the honest way to close this gap without
+introducing new infrastructure (Redis, etc.) an app this size doesn't otherwise need.
+Revisit if the app ever runs as multiple instances behind a load balancer, where a
+shared cache would be the correct mechanism instead of N separate lockout counters.
+
+Scope note: this covers login only, not signup. Signup-flood / fake-account-creation
+protection is a related but separate gap and remains deferred (Section 15).

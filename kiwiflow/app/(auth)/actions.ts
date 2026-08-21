@@ -5,6 +5,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { setSessionCookie, clearSessionCookie } from "@/lib/auth/session";
+import { isLockedOut, recordLoginAttempt, LOCKOUT_MESSAGE } from "@/lib/auth/rateLimit";
 import { ORG_TYPES, SELF_SERVE_ORG_TYPES } from "@/lib/types";
 
 export type FormState = { error?: string } | undefined;
@@ -73,11 +74,17 @@ export async function loginAction(_prev: FormState, formData: FormData): Promise
   }
   const { email, password } = parsed.data;
 
+  if (await isLockedOut(email)) {
+    return { error: LOCKOUT_MESSAGE };
+  }
+
   const user = await prisma.user.findUnique({
     where: { email },
     include: { organization: true },
   });
-  if (!user || !(await verifyPassword(password, user.passwordHash))) {
+  const valid = !!user && (await verifyPassword(password, user.passwordHash));
+  await recordLoginAttempt(email, valid);
+  if (!valid) {
     return { error: "Incorrect email or password" };
   }
 

@@ -81,6 +81,19 @@ model User {
   @@index([organizationId])
 }
 
+// Login rate limiting (docs/BLUEPRINT.md Section 15/24). Deliberately scoped to
+// per-email fail-closed lockout, not IP-based or distributed-cache-backed — this
+// is a single-instance MVP, and a DB table is the honest, no-new-infra way to
+// close the brute-force gap that mattered most: the login form itself had none.
+model LoginAttempt {
+  id          String   @id @default(cuid())
+  email       String
+  succeeded   Boolean
+  createdAt   DateTime @default(now())
+
+  @@index([email, createdAt])
+}
+
 // ---------------------------------------------------------------------------
 // Pillar 1 — Customer Database
 // ---------------------------------------------------------------------------
