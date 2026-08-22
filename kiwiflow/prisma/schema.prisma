@@ -46,28 +46,30 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users                    User[]
-  orchards                 Orchard[]
-  crews                    Crew[]
-  jobsAsGrower             Job[]                     @relation("GrowerJobs")
-  jobsAsContractor         Job[]                     @relation("ContractorJobs")
-  jobsAsDestination        Job[]                     @relation("JobDestination")
-  invoicesIssued           Invoice[]                 @relation("InvoiceFrom")
-  invoicesReceived         Invoice[]                 @relation("InvoiceTo")
-  notifications            Notification[]
-  events                   Event[]
-  workflowRules            WorkflowRule[]
-  onboardingInvites        OnboardingInvite[]
-  documents                Document[]
-  auditLogs                AuditLog[]
-  linksAsGrower            ContractorLink[]          @relation("GrowerLinks")
-  linksAsContractor        ContractorLink[]          @relation("ContractorLinks")
-  coolstoreTemperatureLogs CoolstoreTemperatureLog[]
-  suppliers                Supplier[]
-  materialOrders           MaterialOrder[]
-  broadcastsSent           Broadcast[]               @relation("BroadcastSender")
-  broadcastsReceived       BroadcastRecipient[]      @relation("BroadcastRecipientOrg")
-  gradingResultsRecorded   GradingResult[]
+  users                      User[]
+  orchards                   Orchard[]
+  crews                      Crew[]
+  jobsAsGrower               Job[]                     @relation("GrowerJobs")
+  jobsAsContractor           Job[]                     @relation("ContractorJobs")
+  jobsAsDestination          Job[]                     @relation("JobDestination")
+  invoicesIssued             Invoice[]                 @relation("InvoiceFrom")
+  invoicesReceived           Invoice[]                 @relation("InvoiceTo")
+  notifications              Notification[]
+  events                     Event[]
+  workflowRules              WorkflowRule[]
+  onboardingInvites          OnboardingInvite[]
+  documents                  Document[]
+  auditLogs                  AuditLog[]
+  linksAsGrower              ContractorLink[]          @relation("GrowerLinks")
+  linksAsContractor          ContractorLink[]          @relation("ContractorLinks")
+  coolstoreTemperatureLogs   CoolstoreTemperatureLog[]
+  suppliers                  Supplier[]
+  materialOrders             MaterialOrder[]
+  broadcastsSent             Broadcast[]               @relation("BroadcastSender")
+  broadcastsReceived         BroadcastRecipient[]      @relation("BroadcastRecipientOrg")
+  gradingResultsRecorded     GradingResult[]
+  exportShipmentsAsPackhouse ExportShipment[]          @relation("ExportShipmentPackhouse")
+  exportShipmentsAsTransport ExportShipment[]          @relation("ExportShipmentTransport")
 
   @@index([type])
 }
@@ -91,22 +93,24 @@ model User {
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
-  jobsCreated                    Job[]                     @relation("JobCreatedBy")
-  jobsAssignedAsDriver           Job[]                     @relation("JobAssignedDriver")
-  statusChanges                  JobStatusHistory[]        @relation("StatusChangedBy")
+  jobsCreated                    Job[]                         @relation("JobCreatedBy")
+  jobsAssignedAsDriver           Job[]                         @relation("JobAssignedDriver")
+  statusChanges                  JobStatusHistory[]            @relation("StatusChangedBy")
   notifications                  Notification[]
   auditLogs                      AuditLog[]
   crewMemberLink                 CrewMember?
-  maturityTestsRecorded          HarvestMaturityTest[]     @relation("MaturityTestRecordedBy")
-  sprayEntriesRecorded           SprayDiaryEntry[]         @relation("SprayEntryApplicator")
-  coolstoreLogsRecorded          CoolstoreTemperatureLog[] @relation("CoolstoreLogRecordedBy")
-  materialOrdersCreated          MaterialOrder[]           @relation("MaterialOrderCreatedBy")
-  broadcastsCreated              Broadcast[]               @relation("BroadcastCreatedBy")
-  biosecurityInspectionsRecorded BiosecurityInspection[]   @relation("BiosecurityInspectionInspector")
-  gradingResultsRecorded         GradingResult[]           @relation("GradingResultRecordedBy")
-  wageTopUpsComputed             WageTopUp[]               @relation("WageTopUpComputedBy")
-  safetyIncidentsReported        SafetyIncident[]          @relation("SafetyIncidentReporter")
-  certificationsCreated          Certification[]           @relation("CertificationCreatedBy")
+  maturityTestsRecorded          HarvestMaturityTest[]         @relation("MaturityTestRecordedBy")
+  sprayEntriesRecorded           SprayDiaryEntry[]             @relation("SprayEntryApplicator")
+  coolstoreLogsRecorded          CoolstoreTemperatureLog[]     @relation("CoolstoreLogRecordedBy")
+  materialOrdersCreated          MaterialOrder[]               @relation("MaterialOrderCreatedBy")
+  broadcastsCreated              Broadcast[]                   @relation("BroadcastCreatedBy")
+  biosecurityInspectionsRecorded BiosecurityInspection[]       @relation("BiosecurityInspectionInspector")
+  gradingResultsRecorded         GradingResult[]               @relation("GradingResultRecordedBy")
+  wageTopUpsComputed             WageTopUp[]                   @relation("WageTopUpComputedBy")
+  safetyIncidentsReported        SafetyIncident[]              @relation("SafetyIncidentReporter")
+  certificationsCreated          Certification[]               @relation("CertificationCreatedBy")
+  exportShipmentsCreated         ExportShipment[]              @relation("ExportShipmentCreatedBy")
+  exportStatusChanges            ExportShipmentStatusHistory[] @relation("ExportStatusChangedBy")
 
   @@index([organizationId])
 }
@@ -544,9 +548,79 @@ model GradingResult {
   recordedBy           User         @relation("GradingResultRecordedBy", fields: [recordedById], references: [id])
   createdAt            DateTime     @default(now())
 
+  // A pack house consolidates graded loads — often from several
+  // orchards/growers — into one export shipment; nullable because a load
+  // isn't attached to a shipment until the pack house builds one.
+  exportShipmentId String?
+  exportShipment   ExportShipment? @relation(fields: [exportShipmentId], references: [id])
+
   @@index([jobId])
   @@index([organizationId])
   @@index([gradingDate])
+  @@index([exportShipmentId])
+}
+
+// The export leg: pack house -> a TRANSPORT org's own wharf coolstore
+// (trucked) -> loaded for export, either as palletised cargo on a
+// specialised reefer vessel or packed into containers on a container
+// ship (both real, current NZ modes — see lib/types.ts's
+// EXPORT_SHIPMENT_MODES header comment for the TKL Logistics/Port of
+// Tauranga sourcing). transportOrgId is a TRANSPORT-type org, not a
+// separate "port" org type — that's who actually runs the wharf coolstore
+// and consolidates cargo in practice. KiwiFlow records what happened; it
+// doesn't book cargo, talk to a terminal operating system, the shipping
+// line's booking system, or issue MPI phytosanitary certificates.
+model ExportShipment {
+  id             String        @id @default(cuid())
+  packhouseOrgId String
+  packhouseOrg   Organization  @relation("ExportShipmentPackhouse", fields: [packhouseOrgId], references: [id], onDelete: Cascade)
+  // Nullable until the pack house has decided which transport/wharf
+  // operator is handling this shipment — a shipment can be PREPARING
+  // before that's set.
+  transportOrgId String?
+  transportOrg   Organization? @relation("ExportShipmentTransport", fields: [transportOrgId], references: [id])
+
+  status String @default("PREPARING") // PREPARING | IN_TRANSIT_TO_WHARF | AT_WHARF_COOLSTORE | LOADED_ON_VESSEL | DEPARTED
+  mode   String @default("REEFER_VESSEL_PALLETS") // REEFER_VESSEL_PALLETS | CONTAINER
+
+  palletCount                    Int?
+  containerNumber                String? // ISO 6346 once assigned, e.g. "MSCU1234567" — CONTAINER mode only
+  carrierBookingReference        String?
+  shippingLine                   String? // e.g. the reefer-vessel operator or container line
+  vesselName                     String?
+  voyageNumber                   String?
+  destinationPort                String? // overseas port, e.g. "Shanghai, China" — free text, not a lookup table
+  reeferSetpointC                Float?    @default(0) // see REEFER_SETPOINT_REFERENCE_C
+  etd                            DateTime? // estimated/actual time of departure
+  phytosanitaryCertificateNumber String? // MPI-issued reference, not generated by KiwiFlow
+
+  notes String?
+
+  createdById String
+  createdBy   User     @relation("ExportShipmentCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  gradingResults GradingResult[]
+  statusHistory  ExportShipmentStatusHistory[]
+
+  @@index([packhouseOrgId])
+  @@index([transportOrgId])
+  @@index([status])
+}
+
+model ExportShipmentStatusHistory {
+  id               String         @id @default(cuid())
+  exportShipmentId String
+  exportShipment   ExportShipment @relation(fields: [exportShipmentId], references: [id], onDelete: Cascade)
+  fromStatus       String?
+  toStatus         String
+  changedById      String?
+  changedBy        User?          @relation("ExportStatusChangedBy", fields: [changedById], references: [id])
+  note             String?
+  changedAt        DateTime       @default(now())
+
+  @@index([exportShipmentId])
 }
 
 model CoolstoreTemperatureLog {

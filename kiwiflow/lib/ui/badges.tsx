@@ -7,6 +7,7 @@ import type {
   BiosecurityRiskLevel,
   SafetySeverityLevel,
   CertificationStatus,
+  ExportShipmentStatus,
 } from "@/lib/types";
 
 const JOB_STATUS_STYLE: Record<JobStatus, string> = {
@@ -137,6 +138,23 @@ export function CertificationStatusBadge({ status }: { status: string }) {
   return (
     <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${style}`}>
       {status.replace("_", " ")}
+    </span>
+  );
+}
+
+const EXPORT_SHIPMENT_STATUS_STYLE: Record<ExportShipmentStatus, string> = {
+  PREPARING: "bg-zinc-100 text-zinc-700",
+  IN_TRANSIT_TO_WHARF: "bg-blue-100 text-blue-700",
+  AT_WHARF_COOLSTORE: "bg-indigo-100 text-indigo-700",
+  LOADED_ON_VESSEL: "bg-kf-gold/20 text-kf-gold",
+  DEPARTED: "bg-kf-green-700 text-white",
+};
+
+export function ExportShipmentStatusBadge({ status }: { status: string }) {
+  const style = EXPORT_SHIPMENT_STATUS_STYLE[status as ExportShipmentStatus] ?? "bg-zinc-100 text-zinc-700";
+  return (
+    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${style}`}>
+      {status.replace(/_/g, " ")}
     </span>
   );
 }

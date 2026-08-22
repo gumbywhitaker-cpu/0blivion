@@ -170,6 +170,52 @@ export const CERTIFICATION_STATUSES = ["NOT_STARTED", "IN_PROGRESS", "CERTIFIED"
 export type CertificationStatus = (typeof CERTIFICATION_STATUSES)[number];
 
 /**
+ * The export leg: a TRANSPORT org (e.g. TKL Logistics at Mount Maunganui —
+ * a company jointly owned by post-harvest/pack house operators, not a
+ * separate "port authority" org) trucks pallets from the pack house to its
+ * own wharf coolstore, consolidates loads there (often from several
+ * orchards/growers — one shipment is rarely traceable to a single job),
+ * and loads them for export either as palletised cargo on a specialised
+ * reefer vessel or packed into refrigerated containers on a container
+ * ship — both are real, current NZ kiwifruit export modes (verified
+ * against public reporting on TKL/Port of Tauranga operations), so
+ * ExportShipment supports either rather than assuming containers-only.
+ * A real shipment still requires the wharf coolstore operator's own
+ * systems, the shipping line's booking, and MPI phytosanitary sign-off —
+ * KiwiFlow records what happened, it doesn't book cargo, talk to a
+ * terminal operating system, or issue phytosanitary certificates.
+ */
+export const EXPORT_SHIPMENT_MODES = ["REEFER_VESSEL_PALLETS", "CONTAINER"] as const;
+export type ExportShipmentMode = (typeof EXPORT_SHIPMENT_MODES)[number];
+
+export const EXPORT_SHIPMENT_STATUSES = [
+  "PREPARING",
+  "IN_TRANSIT_TO_WHARF",
+  "AT_WHARF_COOLSTORE",
+  "LOADED_ON_VESSEL",
+  "DEPARTED",
+] as const;
+export type ExportShipmentStatus = (typeof EXPORT_SHIPMENT_STATUSES)[number];
+
+export const EXPORT_SHIPMENT_TRANSITIONS: Record<ExportShipmentStatus, ExportShipmentStatus[]> = {
+  PREPARING: ["IN_TRANSIT_TO_WHARF"],
+  IN_TRANSIT_TO_WHARF: ["AT_WHARF_COOLSTORE"],
+  AT_WHARF_COOLSTORE: ["LOADED_ON_VESSEL"],
+  LOADED_ON_VESSEL: ["DEPARTED"],
+  DEPARTED: [],
+};
+
+/**
+ * Reefer setpoint reference for kiwifruit, °C — same -1°C to +1°C range
+ * industry sources cite for coolstore (see COOLSTORE_REFERENCE_RANGE_C
+ * above); the shipping container/vessel hold is run at the same target as
+ * the coolstore it left, not a separate spec. A default an operator can
+ * override per shipment (some markets/varieties run slightly warmer), not
+ * an authority.
+ */
+export const REEFER_SETPOINT_REFERENCE_C = 0;
+
+/**
  * Default rolling-window size for the RSE/seasonal-labour hours check
  * (lib/payroll.ts). This is a configurable heads-up threshold, not a legal
  * figure this app asserts — see the CrewMember schema comment. 4 weeks is a

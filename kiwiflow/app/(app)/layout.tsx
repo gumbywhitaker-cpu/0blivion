@@ -41,7 +41,18 @@ function navForSession(orgType: string, role: string): { href: string; label: st
     ];
   }
   if (orgType === "PACKHOUSE") {
-    return [{ href: "/packhouse", label: "Incoming" }, { href: "/coolstore", label: "Coolstore" }, ...common];
+    return [
+      { href: "/packhouse", label: "Incoming" },
+      { href: "/export", label: "Export" },
+      { href: "/coolstore", label: "Coolstore" },
+      ...common,
+    ];
+  }
+  if (orgType === "TRANSPORT") {
+    // TKL Logistics is the real-world template: a road transport + wharf
+    // logistics operator, not a separate "port" org — it runs its own
+    // coolstore at the wharf and consolidates cargo for vessel loading.
+    return [{ href: "/export", label: "Export shipments" }, { href: "/coolstore", label: "Coolstore" }, ...common];
   }
   if (orgType === "ADMIN") {
     return [{ href: "/admin", label: "Platform Admin" }];
