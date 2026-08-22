@@ -113,11 +113,47 @@ export const COOLSTORE_REFERENCE_RANGE_C = { min: -1, max: 1 };
 export const EMPLOYMENT_TYPES = ["HOURLY", "PIECE_RATE", "SALARY", "MIXED"] as const;
 export type EmploymentType = (typeof EMPLOYMENT_TYPES)[number];
 
+export const MINIMUM_WAGE_TYPES = ["ADULT", "STARTING_OUT_TRAINING"] as const;
+export type MinimumWageType = (typeof MINIMUM_WAGE_TYPES)[number];
+
+/**
+ * Reference minimum wage rates, NZ$/hour, effective 1 April 2026 per MBIE's
+ * published rate (see docs — sourced live, not invented). Same pattern as
+ * MATURITY_REFERENCE_THRESHOLDS below: a snapshotted default an operator
+ * must keep current each year, not a live government feed. KiwiFlow has no
+ * integration with MBIE/Employment NZ — every WageTopUp record snapshots
+ * the rate it was actually computed against, for audit purposes.
+ */
+export const MINIMUM_WAGE_REFERENCE_RATES: Record<MinimumWageType, number> = {
+  ADULT: 23.95,
+  STARTING_OUT_TRAINING: 19.16,
+};
+
 export const BIOSECURITY_CATEGORIES = ["PSA", "BMSB", "OTHER_PEST", "OTHER_DISEASE", "GENERAL"] as const;
 export type BiosecurityCategory = (typeof BIOSECURITY_CATEGORIES)[number];
 
 export const BIOSECURITY_RISK_LEVELS = ["LOW", "MEDIUM", "HIGH"] as const;
 export type BiosecurityRiskLevel = (typeof BIOSECURITY_RISK_LEVELS)[number];
+
+export const SAFETY_INCIDENT_TYPES = ["HAZARD", "NEAR_MISS", "INCIDENT"] as const;
+export type SafetyIncidentType = (typeof SAFETY_INCIDENT_TYPES)[number];
+
+/**
+ * CRITICAL is for anything that could meet the Health and Safety at Work
+ * Act 2015 definition of a "notifiable event" (death, serious injury,
+ * serious illness) — KiwiFlow does not submit anything to WorkSafe itself,
+ * there is no such integration. Flagging it here is a heads-up to the
+ * operator that they likely have a separate legal notification obligation,
+ * not a record that any notification happened.
+ */
+export const SAFETY_SEVERITY_LEVELS = ["LOW", "MEDIUM", "HIGH", "CRITICAL"] as const;
+export type SafetySeverityLevel = (typeof SAFETY_SEVERITY_LEVELS)[number];
+
+export const CERTIFICATION_SCHEMES = ["NZGAP", "GLOBALGAP", "OTHER"] as const;
+export type CertificationScheme = (typeof CERTIFICATION_SCHEMES)[number];
+
+export const CERTIFICATION_STATUSES = ["NOT_STARTED", "IN_PROGRESS", "CERTIFIED", "EXPIRED", "SUSPENDED"] as const;
+export type CertificationStatus = (typeof CERTIFICATION_STATUSES)[number];
 
 /**
  * Default rolling-window size for the RSE/seasonal-labour hours check

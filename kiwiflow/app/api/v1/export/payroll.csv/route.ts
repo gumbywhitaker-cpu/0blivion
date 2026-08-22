@@ -13,6 +13,7 @@ export async function GET() {
     include: {
       timeEntries: { orderBy: { clockIn: "desc" } },
       pieceRateRecords: { orderBy: { recordDate: "desc" } },
+      wageTopUps: { orderBy: { periodStart: "desc" } },
       crew: true,
     },
   });
@@ -49,6 +50,16 @@ export async function GET() {
         kind: "PIECE_RATE",
         detail: `${r.quantity} ${r.unit} @ $${r.ratePerUnit}`,
         amount: r.amount.toFixed(2),
+      });
+    }
+    for (const t of m.wageTopUps) {
+      rows.push({
+        memberName: m.name,
+        crewName: m.crew.name,
+        date: t.periodStart.toISOString().slice(0, 10),
+        kind: "MIN_WAGE_TOP_UP",
+        detail: `${t.hoursWorked.toFixed(1)}h @ $${t.minimumWageRate.toFixed(2)}/hr required $${t.requiredMinimum.toFixed(2)}, earned $${t.pieceRateEarnings.toFixed(2)}`,
+        amount: t.shortfall.toFixed(2),
       });
     }
   }

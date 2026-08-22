@@ -2,11 +2,18 @@ import { requireSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { totpUri } from "@/lib/auth/totp";
 import { generateQrDataUrl } from "@/lib/qr";
+import { isXeroConfigured } from "@/lib/xero";
+import { disconnectXeroAction } from "./xeroActions";
 import { SettingsForm } from "./SettingsForm";
 import { MfaSettings } from "./MfaSettings";
 
-export default async function SettingsPage() {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ xero?: string }>;
+}) {
   const session = await requireSession();
+  const { xero } = await searchParams;
 
   const [org, user, auditLog] = await Promise.all([
     prisma.organization.findUniqueOrThrow({ where: { id: session.organizationId } }),
@@ -47,6 +54,41 @@ export default async function SettingsPage() {
           Adds a second step at login using an authenticator app (Google Authenticator, Authy, 1Password, etc.).
         </p>
         <MfaSettings enabled={user.totpEnabled} setupQrDataUrl={setupQrDataUrl} setupInProgress={!!user.totpSecret && !user.totpEnabled} />
+      </div>
+
+      <div>
+        <h2 className="mb-1 text-xl font-semibold text-kf-charcoal">Accounting</h2>
+        <p className="mb-4 text-kf-muted">
+          Connect Xero to push issued invoices over as draft accounting entries. This is a scaffold — it
+          needs the operator&apos;s own Xero Developer app credentials configured on this deployment.
+        </p>
+        {xero === "connected" ? (
+          <p className="mb-3 text-sm font-medium text-kf-green-600">Connected to Xero.</p>
+        ) : xero === "error" ? (
+          <p className="mb-3 text-sm font-medium text-kf-red">Couldn&apos;t connect to Xero — try again.</p>
+        ) : null}
+        {!isXeroConfigured() ? (
+          <p className="rounded-lg border border-dashed border-kf-border bg-kf-card p-4 text-sm text-kf-muted">
+            Xero isn&apos;t configured on this deployment (XERO_CLIENT_ID / XERO_CLIENT_SECRET /
+            XERO_REDIRECT_URI aren&apos;t set).
+          </p>
+        ) : org.xeroTenantId ? (
+          <form action={disconnectXeroAction}>
+            <button
+              type="submit"
+              className="btn rounded-md border border-kf-border px-4 py-2 text-sm font-semibold hover:bg-kf-red/10 hover:text-kf-red"
+            >
+              Disconnect Xero
+            </button>
+          </form>
+        ) : (
+          <a
+            href="/api/xero/connect"
+            className="btn inline-block rounded-md bg-kf-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-kf-green-700"
+          >
+            Connect to Xero
+          </a>
+        )}
       </div>
 
       <div>

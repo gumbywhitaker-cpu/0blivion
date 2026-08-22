@@ -19,7 +19,7 @@ datasource db {
 // ---------------------------------------------------------------------------
 
 model Organization {
-  id        String   @id @default(cuid())
+  id        String  @id @default(cuid())
   name      String
   type      String // GROWER | CONTRACTOR | TRANSPORT | PACKHOUSE | ACCOUNTANT | ADMIN
   region    String?
@@ -31,6 +31,18 @@ model Organization {
   gstNumber String?
   address   String?
   phone     String?
+
+  // Xero accounting sync (lib/xero.ts) — OAuth2 tokens for this org's
+  // connected Xero organisation. Nullable because most orgs won't connect
+  // one; presence of xeroTenantId is what the UI treats as "connected".
+  // Plain-text at rest like every other secret in this codebase today (see
+  // SECURITY.md's existing "no field-level encryption" gap) — not a new
+  // exception, the same one, extended to a new kind of secret.
+  xeroTenantId     String?
+  xeroAccessToken  String?
+  xeroRefreshToken String?
+  xeroTokenExpires DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -92,6 +104,9 @@ model User {
   broadcastsCreated              Broadcast[]               @relation("BroadcastCreatedBy")
   biosecurityInspectionsRecorded BiosecurityInspection[]   @relation("BiosecurityInspectionInspector")
   gradingResultsRecorded         GradingResult[]           @relation("GradingResultRecordedBy")
+  wageTopUpsComputed             WageTopUp[]               @relation("WageTopUpComputedBy")
+  safetyIncidentsReported        SafetyIncident[]          @relation("SafetyIncidentReporter")
+  certificationsCreated          Certification[]           @relation("CertificationCreatedBy")
 
   @@index([organizationId])
 }
@@ -144,6 +159,8 @@ model Orchard {
   sprayEntries           SprayDiaryEntry[]
   materialOrders         MaterialOrder[]
   biosecurityInspections BiosecurityInspection[]
+  safetyIncidents        SafetyIncident[]
+  certifications         Certification[]
 
   @@index([organizationId])
 }
@@ -199,11 +216,13 @@ model CrewMember {
   isRse                     Boolean @default(false)
   hourlyRate                Float?
   minGuaranteedHoursPerWeek Float?
+  minimumWageType           String  @default("ADULT") // ADULT | STARTING_OUT_TRAINING — see MINIMUM_WAGE_REFERENCE_RATES
 
   createdAt DateTime @default(now())
 
   timeEntries      TimeEntry[]
   pieceRateRecords PieceRateRecord[]
+  wageTopUps       WageTopUp[]
 
   @@index([crewId])
 }
@@ -383,6 +402,34 @@ model PieceRateRecord {
   @@index([jobId])
 }
 
+// Minimum-wage top-up for piece-rate/mixed workers (docs/BLUEPRINT.md
+// Section 22 addendum). NZ's Minimum Wage Act requires an employer paying
+// piece rates to ensure the worker still earns at least minimum wage for
+// every hour worked — lib/payroll.ts computes a weekly check (hours worked
+// x the crew member's minimumWageType rate vs. piece-rate earnings that
+// same week) and this record is created when the operator confirms and
+// pays the resulting shortfall. minimumWageRate is snapshotted per row
+// since MINIMUM_WAGE_REFERENCE_RATES changes yearly and every past
+// calculation must stay checkable against the rate it actually used.
+model WageTopUp {
+  id                String     @id @default(cuid())
+  crewMemberId      String
+  crewMember        CrewMember @relation(fields: [crewMemberId], references: [id], onDelete: Cascade)
+  periodStart       DateTime // Monday of the ISO week this top-up covers
+  periodEnd         DateTime // Sunday
+  hoursWorked       Float
+  pieceRateEarnings Float
+  minimumWageRate   Float
+  requiredMinimum   Float // hoursWorked * minimumWageRate, snapshotted
+  shortfall         Float // amount actually paid as top-up
+  computedById      String
+  computedBy        User       @relation("WageTopUpComputedBy", fields: [computedById], references: [id])
+  createdAt         DateTime   @default(now())
+
+  @@unique([crewMemberId, periodStart])
+  @@index([crewMemberId])
+}
+
 // ---------------------------------------------------------------------------
 // Psa / biosecurity risk monitoring — orchard-level pest and disease
 // observations, distinct from SprayDiaryEntry (which records treatments
@@ -409,6 +456,67 @@ model BiosecurityInspection {
   @@index([orchardId])
   @@index([inspectionDate])
   @@index([riskLevel])
+}
+
+// ---------------------------------------------------------------------------
+// Health & safety incident/hazard reporting — the Health and Safety at Work
+// Act 2015 requires employers to have a system for this; KiwiFlow had none
+// until now. Same shape as BiosecurityInspection deliberately: an orchard
+// visit is where both kinds of finding actually happen. This is KiwiFlow's
+// own record, not a submission to WorkSafe — see the SAFETY_SEVERITY_LEVELS
+// comment in lib/types.ts on what CRITICAL does and doesn't mean.
+// ---------------------------------------------------------------------------
+
+model SafetyIncident {
+  id               String    @id @default(cuid())
+  orchardId        String
+  orchard          Orchard   @relation(fields: [orchardId], references: [id], onDelete: Cascade)
+  incidentDate     DateTime
+  type             String // HAZARD | NEAR_MISS | INCIDENT
+  severity         String // LOW | MEDIUM | HIGH | CRITICAL
+  description      String
+  injuryInvolved   Boolean   @default(false)
+  actionTaken      String?
+  followUpRequired Boolean   @default(false)
+  followUpDate     DateTime?
+  reportedById     String
+  reportedBy       User      @relation("SafetyIncidentReporter", fields: [reportedById], references: [id])
+  createdAt        DateTime  @default(now())
+
+  @@index([orchardId])
+  @@index([incidentDate])
+  @@index([severity])
+}
+
+// ---------------------------------------------------------------------------
+// NZGAP / GLOBALG.A.P. certification tracker. KiwiFlow already generates
+// most of the underlying audit evidence a certification body checks
+// (SprayDiaryEntry, HarvestMaturityTest, CoolstoreTemperatureLog) — this is
+// the record that ties a certificate number and expiry to an orchard so a
+// grower can actually hand it to an auditor, rather than the evidence
+// existing with no certificate wrapper around it. KiwiFlow does not submit
+// anything to AsureQuality/GLOBALG.A.P. itself — an annual on-site audit by
+// a real certification body is still how the actual certificate is earned.
+// ---------------------------------------------------------------------------
+
+model Certification {
+  id                String    @id @default(cuid())
+  orchardId         String
+  orchard           Orchard   @relation(fields: [orchardId], references: [id], onDelete: Cascade)
+  scheme            String // NZGAP | GLOBALGAP | OTHER
+  certificateNumber String?
+  ggn               String? // GLOBALG.A.P. Number — NZGAP-Global growers get one of these too
+  status            String    @default("NOT_STARTED") // NOT_STARTED | IN_PROGRESS | CERTIFIED | EXPIRED | SUSPENDED
+  issuedDate        DateTime?
+  expiryDate        DateTime?
+  notes             String?
+  createdById       String
+  createdBy         User      @relation("CertificationCreatedBy", fields: [createdById], references: [id])
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([orchardId])
+  @@index([status])
 }
 
 // ---------------------------------------------------------------------------
@@ -479,6 +587,11 @@ model Invoice {
   dueDate       DateTime?
   issuedAt      DateTime?
   paidAt        DateTime?
+  // Set once lib/xero.ts successfully pushes this invoice — the Xero-side
+  // Invoice ID, so a re-push can be recognised as "already synced" instead
+  // of creating a duplicate in Xero.
+  xeroInvoiceId String?
+  xeroSyncedAt  DateTime?
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 

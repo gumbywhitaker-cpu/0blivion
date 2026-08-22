@@ -26,6 +26,8 @@ function navForSession(orgType: string, role: string): { href: string; label: st
       { href: "/contractors", label: "Contractors" },
       { href: "/broadcasts", label: "Broadcasts" },
       { href: "/biosecurity", label: "Biosecurity" },
+      { href: "/safety", label: "Health & Safety" },
+      { href: "/certifications", label: "Certifications" },
       ...common,
       { href: "/coolstore", label: "Coolstore" },
     ];

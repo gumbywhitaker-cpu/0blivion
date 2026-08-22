@@ -2,9 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
-import { computeWageSummary } from "@/lib/payroll";
+import { computeWageSummary, computeWeeklyTopUpCheck, startOfIsoWeek } from "@/lib/payroll";
 import { TimeEntryForm } from "./TimeEntryForm";
 import { PieceRateForm } from "./PieceRateForm";
+import { WageTopUpForm } from "./WageTopUpForm";
 
 function formatHours(h: number) {
   return `${h.toFixed(1)} hrs`;
@@ -12,21 +13,29 @@ function formatHours(h: number) {
 
 export default async function CrewMemberPayrollPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string; memberId: string }>;
+  searchParams: Promise<{ week?: string }>;
 }) {
   const session = await requireSession();
   const { id: crewId, memberId } = await params;
+  const { week } = await searchParams;
 
   const member = await prisma.crewMember.findFirst({
     where: { id: memberId, crewId, crew: { organizationId: session.organizationId } },
   });
   if (!member) notFound();
 
-  const [timeEntries, pieceRateRecords, summary] = await Promise.all([
+  const requestedWeek = week ? new Date(week) : new Date();
+  const weekStart = startOfIsoWeek(Number.isNaN(requestedWeek.getTime()) ? new Date() : requestedWeek);
+
+  const [timeEntries, pieceRateRecords, wageTopUps, summary, topUpCheck] = await Promise.all([
     prisma.timeEntry.findMany({ where: { crewMemberId: memberId }, orderBy: { clockIn: "desc" }, take: 20 }),
     prisma.pieceRateRecord.findMany({ where: { crewMemberId: memberId }, orderBy: { recordDate: "desc" }, take: 20 }),
+    prisma.wageTopUp.findMany({ where: { crewMemberId: memberId }, orderBy: { periodStart: "desc" }, take: 20 }),
     computeWageSummary(memberId),
+    computeWeeklyTopUpCheck(memberId, weekStart),
   ]);
 
   return (
@@ -79,6 +88,65 @@ export default async function CrewMemberPayrollPage({
             heads-up from the operator-entered threshold, not a legal determination — verify against the
             actual RSE Agreement to Recruit and current MBIE policy before acting on it.
           </p>
+        ) : null}
+      </section>
+
+      <section
+        className={`rounded-lg border p-4 ${
+          topUpCheck.shortfall > 0 ? "border-kf-red bg-kf-red/5" : "border-kf-border bg-kf-card"
+        }`}
+      >
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-semibold text-kf-charcoal">Weekly minimum-wage check</h2>
+          <form method="GET" className="flex items-center gap-2 text-sm">
+            <label htmlFor="week" className="text-kf-muted">
+              Week of
+            </label>
+            <input
+              id="week"
+              name="week"
+              type="date"
+              defaultValue={weekStart.toISOString().slice(0, 10)}
+              className="rounded-md border border-kf-border bg-white px-2 py-1 text-sm"
+            />
+            <button type="submit" className="rounded-md border border-kf-border px-3 py-1 text-sm hover:bg-kf-green-100">
+              Go
+            </button>
+          </form>
+        </div>
+        <p className="mb-3 text-xs text-kf-muted">
+          {topUpCheck.periodStart.toISOString().slice(0, 10)} – {new Date(topUpCheck.periodEnd.getTime() - 1).toISOString().slice(0, 10)}
+        </p>
+        <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
+          <div>
+            <div className="text-kf-muted">Hours worked</div>
+            <div className="text-lg font-semibold text-kf-charcoal">{formatHours(topUpCheck.hoursWorked)}</div>
+          </div>
+          <div>
+            <div className="text-kf-muted">Piece-rate earnings</div>
+            <div className="text-lg font-semibold text-kf-charcoal">${topUpCheck.pieceRateEarnings.toFixed(2)}</div>
+          </div>
+          <div>
+            <div className="text-kf-muted">Required (${topUpCheck.minimumWageRate.toFixed(2)}/hr)</div>
+            <div className="text-lg font-semibold text-kf-charcoal">${topUpCheck.requiredMinimum.toFixed(2)}</div>
+          </div>
+          <div>
+            <div className="text-kf-muted">Shortfall</div>
+            <div className={`text-lg font-semibold ${topUpCheck.shortfall > 0 ? "text-kf-red" : "text-kf-green-600"}`}>
+              ${topUpCheck.shortfall.toFixed(2)}
+            </div>
+          </div>
+        </div>
+        {topUpCheck.shortfall > 0 && !topUpCheck.alreadyRecorded ? (
+          <div className="mt-4">
+            <p className="mb-2 text-sm text-kf-red">
+              Piece-rate earnings this week fell short of the {topUpCheck.minimumWageRate.toFixed(2)}
+              /hr reference rate. Confirming records a ${topUpCheck.shortfall.toFixed(2)} top-up payment.
+            </p>
+            <WageTopUpForm crewMemberId={member.id} weekStart={weekStart.toISOString().slice(0, 10)} />
+          </div>
+        ) : topUpCheck.alreadyRecorded ? (
+          <p className="mt-3 text-sm font-medium text-kf-green-600">Top-up already recorded for this week.</p>
         ) : null}
       </section>
 
@@ -136,6 +204,23 @@ export default async function CrewMemberPayrollPage({
           </div>
         </section>
       </div>
+
+      {wageTopUps.length > 0 ? (
+        <section>
+          <h3 className="mb-2 text-sm font-semibold text-kf-charcoal">Recorded minimum-wage top-ups</h3>
+          <ul className="divide-y divide-kf-border rounded-lg border border-kf-border bg-kf-card text-sm">
+            {wageTopUps.map((t) => (
+              <li key={t.id} className="flex items-center justify-between px-4 py-2">
+                <span>
+                  Week of {t.periodStart.toISOString().slice(0, 10)} — {formatHours(t.hoursWorked)} @ $
+                  {t.minimumWageRate.toFixed(2)}/hr
+                </span>
+                <span className="font-semibold text-kf-charcoal">${t.shortfall.toFixed(2)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </div>
   );
 }

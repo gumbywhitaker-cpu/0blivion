@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { InvoiceStatusBadge } from "@/lib/ui/badges";
-import { sendInvoiceAction, markPaidAction } from "../actions";
+import { sendInvoiceAction, markPaidAction, pushInvoiceToXeroAction } from "../actions";
 import { PrintButton } from "./PrintButton";
 
 export default async function InvoiceDetailPage({
@@ -133,6 +133,22 @@ export default async function InvoiceDetailPage({
               Mark as paid
             </button>
           </form>
+        ) : null}
+        {isIssuer && invoice.fromOrg.xeroTenantId && !invoice.xeroInvoiceId ? (
+          <form action={pushInvoiceToXeroAction}>
+            <input type="hidden" name="invoiceId" value={invoice.id} />
+            <button
+              type="submit"
+              className="btn rounded-md border border-kf-border px-4 py-2 text-sm font-semibold hover:bg-kf-green-100"
+            >
+              Push to Xero
+            </button>
+          </form>
+        ) : null}
+        {invoice.xeroInvoiceId ? (
+          <span className="self-center rounded-md bg-kf-green-100 px-3 py-2 text-sm font-medium text-kf-green-700">
+            Synced to Xero {invoice.xeroSyncedAt ? `· ${invoice.xeroSyncedAt.toISOString().slice(0, 10)}` : ""}
+          </span>
         ) : null}
       </div>
     </div>

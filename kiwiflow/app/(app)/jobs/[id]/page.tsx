@@ -8,7 +8,8 @@ import { AssignDriverForm, UpdateEtaForm } from "./LogisticsActions";
 import { MaturityTestForm } from "./MaturityTestForm";
 import { SprayDiaryForm } from "./SprayDiaryForm";
 import { BiosecurityInspectionForm } from "./BiosecurityInspectionForm";
-import { BiosecurityRiskBadge } from "@/lib/ui/badges";
+import { SafetyIncidentForm } from "./SafetyIncidentForm";
+import { BiosecurityRiskBadge, SafetySeverityBadge } from "@/lib/ui/badges";
 import type { JobStatus } from "@/lib/types";
 
 export default async function JobDetailPage({
@@ -28,6 +29,7 @@ export default async function JobDetailPage({
       orchard: {
         include: {
           biosecurityInspections: { orderBy: { inspectionDate: "desc" }, take: 10, include: { inspectedBy: true } },
+          safetyIncidents: { orderBy: { incidentDate: "desc" }, take: 10, include: { reportedBy: true } },
         },
       },
       growerOrg: true,
@@ -259,6 +261,33 @@ export default async function JobDetailPage({
                   </p>
                 ) : null}
                 <p className="text-xs text-kf-muted">Inspected by {b.inspectedBy.name}</p>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <h2 className="text-lg font-semibold text-kf-charcoal">Health &amp; safety</h2>
+        <SafetyIncidentForm jobId={job.id} orchardId={job.orchardId} />
+        {job.orchard.safetyIncidents.length > 0 ? (
+          <ul className="flex flex-col gap-2">
+            {job.orchard.safetyIncidents.map((s) => (
+              <li key={s.id} className="rounded-lg border border-kf-border bg-kf-card p-3 text-sm">
+                <div className="mb-1 flex items-center gap-2">
+                  <SafetySeverityBadge severity={s.severity} />
+                  <span className="font-semibold text-kf-charcoal">{s.type.replace("_", " ")}</span>
+                  <span className="text-kf-muted">{s.incidentDate.toISOString().slice(0, 10)}</span>
+                  {s.injuryInvolved ? <span className="text-xs font-semibold text-kf-red">Injury involved</span> : null}
+                </div>
+                <p className="text-kf-charcoal">{s.description}</p>
+                {s.actionTaken ? <p className="text-kf-muted">Action: {s.actionTaken}</p> : null}
+                {s.followUpRequired ? (
+                  <p className="font-medium text-kf-gold">
+                    Follow-up needed{s.followUpDate ? ` by ${s.followUpDate.toISOString().slice(0, 10)}` : ""}
+                  </p>
+                ) : null}
+                <p className="text-xs text-kf-muted">Reported by {s.reportedBy.name}</p>
               </li>
             ))}
           </ul>

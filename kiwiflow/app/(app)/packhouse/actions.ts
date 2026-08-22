@@ -5,8 +5,45 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/auth/session";
 import { recordAuditLog } from "@/lib/audit";
+import { estimateGradingFromPhoto, type GradingEstimate } from "@/lib/aiGrading";
 
 export type FormState = { error?: string } | undefined;
+export type AiEstimateFormState = { error?: string; estimate?: GradingEstimate } | undefined;
+
+const MAX_PHOTO_BYTES = 8 * 1024 * 1024; // 8MB — comfortably above a phone photo, well under most upload limits
+
+/** Vision-model cross-check only — see lib/aiGrading.ts. Never writes to
+ * GradingResult; the packhouse still enters its own numbers by hand. The
+ * photo itself is never stored — it's sent to the AI call and discarded,
+ * not retained anywhere in KiwiFlow. */
+export async function estimateGradingFromPhotoAction(
+  _prev: AiEstimateFormState,
+  formData: FormData,
+): Promise<AiEstimateFormState> {
+  const session = await requireSession();
+  if (session.orgType !== "PACKHOUSE") {
+    return { error: "Only pack house organisations can request an AI estimate" };
+  }
+
+  const jobId = formData.get("jobId");
+  if (typeof jobId !== "string" || !jobId) return { error: "Missing delivery" };
+
+  const job = await prisma.job.findFirst({
+    where: { id: jobId, destinationOrgId: session.organizationId, jobType: "TRANSPORT" },
+  });
+  if (!job) return { error: "Delivery not found" };
+
+  const photo = formData.get("photo");
+  if (!(photo instanceof File) || photo.size === 0) return { error: "Choose a photo first" };
+  if (photo.size > MAX_PHOTO_BYTES) return { error: "Photo is too large (max 8MB)" };
+  if (!photo.type.startsWith("image/")) return { error: "That file isn't an image" };
+
+  const bytes = Buffer.from(await photo.arrayBuffer());
+  const result = await estimateGradingFromPhoto(bytes.toString("base64"), photo.type);
+  if (!result.ok) return { error: result.reason };
+
+  return { estimate: result.estimate };
+}
 
 const gradingSchema = z.object({
   jobId: z.string().min(1),

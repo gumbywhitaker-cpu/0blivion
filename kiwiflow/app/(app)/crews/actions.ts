@@ -6,8 +6,9 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/auth/session";
 import { assertCanManage } from "@/lib/auth/requireRole";
-import { EMPLOYMENT_TYPES } from "@/lib/types";
+import { EMPLOYMENT_TYPES, MINIMUM_WAGE_TYPES } from "@/lib/types";
 import { recordAuditLog } from "@/lib/audit";
+import { computeWeeklyTopUpCheck } from "@/lib/payroll";
 
 export type FormState = { error?: string } | undefined;
 
@@ -40,6 +41,7 @@ const memberSchema = z.object({
   isRse: z.string().optional(),
   hourlyRate: z.string().optional(),
   minGuaranteedHoursPerWeek: z.string().optional(),
+  minimumWageType: z.enum(MINIMUM_WAGE_TYPES).default("ADULT"),
 });
 
 export async function addCrewMemberAction(_prev: FormState, formData: FormData): Promise<FormState> {
@@ -50,7 +52,8 @@ export async function addCrewMemberAction(_prev: FormState, formData: FormData):
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
   }
-  const { crewId, name, phone, employmentType, isRse, hourlyRate, minGuaranteedHoursPerWeek } = parsed.data;
+  const { crewId, name, phone, employmentType, isRse, hourlyRate, minGuaranteedHoursPerWeek, minimumWageType } =
+    parsed.data;
 
   const crew = await prisma.crew.findFirst({
     where: { id: crewId, organizationId: session.organizationId },
@@ -71,6 +74,7 @@ export async function addCrewMemberAction(_prev: FormState, formData: FormData):
       isRse: isRse === "on",
       hourlyRate: Number.isFinite(rate) ? rate : null,
       minGuaranteedHoursPerWeek: Number.isFinite(minHours) ? minHours : null,
+      minimumWageType,
     },
   });
   revalidatePath(`/crews/${crewId}`);
@@ -180,6 +184,70 @@ export async function logPieceRateAction(_prev: FormState, formData: FormData): 
     entityType: "PieceRateRecord",
     entityId: record.id,
     detail: { crewMemberId, unit, quantity: qty, amount: record.amount },
+  });
+
+  revalidatePath(`/crews/${member.crewId}/members/${crewMemberId}`);
+}
+
+const wageTopUpSchema = z.object({
+  crewMemberId: z.string().min(1),
+  weekStart: z.string().min(1, "Choose a week"),
+});
+
+/** Confirms and pays the minimum-wage shortfall lib/payroll.ts computed for
+ * a given ISO week. Recomputes server-side rather than trusting any
+ * client-submitted numbers — the client only ever sends which week. Fails
+ * closed if there's no shortfall (nothing to pay) or the week was already
+ * recorded (the @@unique on [crewMemberId, periodStart] would reject the
+ * insert anyway, but a clear error beats a raw constraint violation). */
+export async function recordWageTopUpAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const session = await requireSession();
+  assertCanManage(session.role);
+
+  const parsed = wageTopUpSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  }
+  const { crewMemberId, weekStart } = parsed.data;
+
+  const member = await prisma.crewMember.findFirst({
+    where: { id: crewMemberId, crew: { organizationId: session.organizationId } },
+  });
+  if (!member) return { error: "Crew member not found" };
+
+  const weekStartDate = new Date(weekStart);
+  if (Number.isNaN(weekStartDate.getTime())) return { error: "Invalid week" };
+
+  const check = await computeWeeklyTopUpCheck(crewMemberId, weekStartDate);
+  if (check.alreadyRecorded) return { error: "A top-up for this week has already been recorded" };
+  if (check.shortfall <= 0) return { error: "No shortfall for this week — nothing to record" };
+
+  const topUp = await prisma.wageTopUp.create({
+    data: {
+      crewMemberId,
+      periodStart: check.periodStart,
+      periodEnd: check.periodEnd,
+      hoursWorked: check.hoursWorked,
+      pieceRateEarnings: check.pieceRateEarnings,
+      minimumWageRate: check.minimumWageRate,
+      requiredMinimum: check.requiredMinimum,
+      shortfall: check.shortfall,
+      computedById: session.userId,
+    },
+  });
+
+  await recordAuditLog({
+    organizationId: session.organizationId,
+    actorId: session.userId,
+    action: "wage_top_up.recorded",
+    entityType: "WageTopUp",
+    entityId: topUp.id,
+    detail: {
+      crewMemberId,
+      periodStart: check.periodStart.toISOString(),
+      shortfall: check.shortfall,
+      minimumWageRate: check.minimumWageRate,
+    },
   });
 
   revalidatePath(`/crews/${member.crewId}/members/${crewMemberId}`);

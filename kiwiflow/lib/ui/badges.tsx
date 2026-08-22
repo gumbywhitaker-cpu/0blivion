@@ -5,6 +5,8 @@ import type {
   NotificationUrgency,
   MaterialOrderStatus,
   BiosecurityRiskLevel,
+  SafetySeverityLevel,
+  CertificationStatus,
 } from "@/lib/types";
 
 const JOB_STATUS_STYLE: Record<JobStatus, string> = {
@@ -102,6 +104,39 @@ export function BiosecurityRiskBadge({ riskLevel }: { riskLevel: string }) {
   return (
     <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${style}`}>
       {riskLevel}
+    </span>
+  );
+}
+
+const SAFETY_SEVERITY_STYLE: Record<SafetySeverityLevel, string> = {
+  LOW: "bg-kf-green-100 text-kf-green-700",
+  MEDIUM: "bg-kf-gold/20 text-kf-gold",
+  HIGH: "bg-kf-red/10 text-kf-red",
+  CRITICAL: "bg-kf-red text-white",
+};
+
+export function SafetySeverityBadge({ severity }: { severity: string }) {
+  const style = SAFETY_SEVERITY_STYLE[severity as SafetySeverityLevel] ?? "bg-zinc-100 text-zinc-700";
+  return (
+    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${style}`}>
+      {severity}
+    </span>
+  );
+}
+
+const CERTIFICATION_STATUS_STYLE: Record<CertificationStatus, string> = {
+  NOT_STARTED: "bg-zinc-100 text-zinc-600",
+  IN_PROGRESS: "bg-blue-100 text-blue-700",
+  CERTIFIED: "bg-kf-green-100 text-kf-green-700",
+  EXPIRED: "bg-kf-red/10 text-kf-red",
+  SUSPENDED: "bg-kf-red text-white",
+};
+
+export function CertificationStatusBadge({ status }: { status: string }) {
+  const style = CERTIFICATION_STATUS_STYLE[status as CertificationStatus] ?? "bg-zinc-100 text-zinc-700";
+  return (
+    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${style}`}>
+      {status.replace("_", " ")}
     </span>
   );
 }

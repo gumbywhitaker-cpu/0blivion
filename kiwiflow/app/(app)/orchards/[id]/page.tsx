@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
-import { JobStatusBadge, BiosecurityRiskBadge } from "@/lib/ui/badges";
+import { JobStatusBadge, BiosecurityRiskBadge, SafetySeverityBadge, CertificationStatusBadge } from "@/lib/ui/badges";
+import { CertificationStatusForm } from "./CertificationStatusForm";
 
 export default async function OrchardDetailPage({
   params,
@@ -17,6 +18,8 @@ export default async function OrchardDetailPage({
     include: {
       jobs: { orderBy: { scheduledDate: "desc" }, take: 20 },
       biosecurityInspections: { orderBy: { inspectionDate: "desc" }, take: 10 },
+      safetyIncidents: { orderBy: { incidentDate: "desc" }, take: 10 },
+      certifications: { orderBy: { createdAt: "desc" } },
     },
   });
   if (!orchard) notFound();
@@ -97,6 +100,59 @@ export default async function OrchardDetailPage({
           </ul>
         </section>
       ) : null}
+
+      {orchard.safetyIncidents.length > 0 ? (
+        <section>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-kf-charcoal">Health &amp; safety reports</h2>
+            <Link href="/safety" className="text-sm font-medium text-kf-green-600 hover:underline">
+              View all orchards
+            </Link>
+          </div>
+          <ul className="flex flex-col gap-2">
+            {orchard.safetyIncidents.map((s) => (
+              <li key={s.id} className="rounded-lg border border-kf-border bg-kf-card p-3 text-sm">
+                <div className="mb-1 flex items-center gap-2">
+                  <SafetySeverityBadge severity={s.severity} />
+                  <span className="font-semibold text-kf-charcoal">{s.type.replace("_", " ")}</span>
+                  <span className="text-kf-muted">{s.incidentDate.toISOString().slice(0, 10)}</span>
+                </div>
+                <p className="text-kf-charcoal">{s.description}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      <section>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-kf-charcoal">Certifications</h2>
+          <Link href="/certifications" className="text-sm font-medium text-kf-green-600 hover:underline">
+            Manage all orchards
+          </Link>
+        </div>
+        {orchard.certifications.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-kf-border bg-kf-card p-4 text-sm text-kf-muted">
+            No certifications recorded for this orchard yet.
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {orchard.certifications.map((c) => (
+              <li key={c.id} className="rounded-lg border border-kf-border bg-kf-card p-3 text-sm">
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <CertificationStatusBadge status={c.status} />
+                  <span className="font-semibold text-kf-charcoal">{c.scheme}</span>
+                  {c.certificateNumber ? <span className="text-kf-muted">#{c.certificateNumber}</span> : null}
+                  {c.expiryDate ? (
+                    <span className="text-kf-muted">expires {c.expiryDate.toISOString().slice(0, 10)}</span>
+                  ) : null}
+                </div>
+                <CertificationStatusForm certificationId={c.id} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }

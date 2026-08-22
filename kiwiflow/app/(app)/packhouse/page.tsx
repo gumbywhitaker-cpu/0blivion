@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { JobStatusBadge } from "@/lib/ui/badges";
 import { GradingForm } from "./GradingForm";
+import { AiGradingEstimate } from "./AiGradingEstimate";
 
 // Logistics Bridge, pack house side (docs/BLUEPRINT.md: "What's arriving and
 // when?"). Read-only: a pack house doesn't own these jobs and shouldn't be
@@ -102,6 +103,9 @@ export default async function PackhousePage() {
                       {grading.averageBrix != null ? ` · ${grading.averageBrix}°Bx` : ""}
                     </p>
                   ) : null}
+                  <div className="mb-2">
+                    <AiGradingEstimate jobId={job.id} />
+                  </div>
                   <GradingForm
                     jobId={job.id}
                     existing={

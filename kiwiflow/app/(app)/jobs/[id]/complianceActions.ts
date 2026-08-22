@@ -11,6 +11,8 @@ import {
   COOLSTORE_REFERENCE_RANGE_C,
   BIOSECURITY_CATEGORIES,
   BIOSECURITY_RISK_LEVELS,
+  SAFETY_INCIDENT_TYPES,
+  SAFETY_SEVERITY_LEVELS,
 } from "@/lib/types";
 import { notifyOrgOwners } from "@/lib/notify";
 import { recordAuditLog } from "@/lib/audit";
@@ -255,4 +257,75 @@ export async function recordBiosecurityInspectionAction(_prev: FormState, formDa
 
   revalidatePath(`/jobs/${data.jobId}`);
   revalidatePath("/biosecurity");
+}
+
+const safetyIncidentSchema = z.object({
+  jobId: z.string().min(1),
+  orchardId: z.string().min(1),
+  incidentDate: z.string().min(1),
+  type: z.enum(SAFETY_INCIDENT_TYPES),
+  severity: z.enum(SAFETY_SEVERITY_LEVELS),
+  description: z.string().trim().min(1, "Describe what happened"),
+  injuryInvolved: z.string().optional(),
+  actionTaken: z.string().trim().max(1000).optional(),
+  followUpRequired: z.string().optional(),
+  followUpDate: z.string().optional(),
+});
+
+/** Same access pattern as biosecurity/spray/maturity entries — whichever
+ * org is party to the job can log a finding. KiwiFlow's own record, not a
+ * submission to WorkSafe (see the SAFETY_SEVERITY_LEVELS comment in
+ * lib/types.ts). */
+export async function recordSafetyIncidentAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const session = await requireSession();
+  const parsed = safetyIncidentSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  }
+  const data = parsed.data;
+
+  const job = await assertOnJob(data.jobId, session.organizationId).catch(() => null);
+  if (!job) return { error: "Job not found" };
+
+  const followUpRequired = data.followUpRequired === "on";
+  const followUpDate = followUpRequired && data.followUpDate ? new Date(data.followUpDate) : null;
+
+  const incident = await prisma.safetyIncident.create({
+    data: {
+      orchardId: data.orchardId,
+      incidentDate: new Date(data.incidentDate),
+      type: data.type,
+      severity: data.severity,
+      description: data.description,
+      injuryInvolved: data.injuryInvolved === "on",
+      actionTaken: data.actionTaken || null,
+      followUpRequired,
+      followUpDate,
+      reportedById: session.userId,
+    },
+  });
+
+  await recordAuditLog({
+    organizationId: session.organizationId,
+    actorId: session.userId,
+    action: "safety_incident.reported",
+    entityType: "SafetyIncident",
+    entityId: incident.id,
+    detail: { orchardId: data.orchardId, type: data.type, severity: data.severity },
+  });
+
+  if (data.severity === "HIGH" || data.severity === "CRITICAL") {
+    await notifyOrgOwners({
+      organizationId: job.growerOrgId,
+      title: `${data.severity === "CRITICAL" ? "Critical" : "High-severity"} safety ${data.type.toLowerCase().replace("_", " ")}`,
+      body:
+        data.severity === "CRITICAL"
+          ? `${data.description} — this may meet the Health and Safety at Work Act's definition of a notifiable event. KiwiFlow does not notify WorkSafe on your behalf; check your own obligations.`
+          : data.description,
+      urgency: "URGENT",
+    });
+  }
+
+  revalidatePath(`/jobs/${data.jobId}`);
+  revalidatePath("/safety");
 }
