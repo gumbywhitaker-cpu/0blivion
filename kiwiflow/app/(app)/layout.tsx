@@ -22,6 +22,7 @@ function navForSession(orgType: string, role: string): { href: string; label: st
   if (orgType === "GROWER") {
     return [
       { href: "/grower", label: "Command Center" },
+      { href: "/briefing", label: "Daily Briefing" },
       { href: "/orchards", label: "Orchards" },
       { href: "/contractors", label: "Contractors" },
       { href: "/broadcasts", label: "Broadcasts" },
@@ -35,6 +36,7 @@ function navForSession(orgType: string, role: string): { href: string; label: st
   if (orgType === "CONTRACTOR") {
     return [
       { href: "/contractor", label: "Contractor Hub" },
+      { href: "/briefing", label: "Daily Briefing" },
       { href: "/crews", label: "Crews" },
       { href: "/broadcasts", label: "Broadcasts" },
       ...common,

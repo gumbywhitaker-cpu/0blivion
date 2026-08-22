@@ -70,6 +70,7 @@ model Organization {
   gradingResultsRecorded     GradingResult[]
   exportShipmentsAsPackhouse ExportShipment[]          @relation("ExportShipmentPackhouse")
   exportShipmentsAsTransport ExportShipment[]          @relation("ExportShipmentTransport")
+  dailyBriefings             DailyBriefing[]
 
   @@index([type])
 }
@@ -900,5 +901,35 @@ model BroadcastRecipient {
   createdAt      DateTime     @default(now())
 
   @@unique([broadcastId, organizationId])
+  @@index([organizationId])
+}
+
+// ---------------------------------------------------------------------------
+// AI Daily Briefing
+// ---------------------------------------------------------------------------
+
+// A read-only AI-generated summary of one org's day: today's/overdue jobs,
+// unread notifications, overdue invoices — the same facts a GROWER or
+// CONTRACTOR would already see on their dashboard, restated as prose with
+// suggested priorities. Never writes to Job/Invoice/Notification itself; it
+// only reads them. Deliberately not named "Conductor" even though it's the
+// same "look across jobs + orgs and act" territory — that name is already
+// the event-bus/rule-engine in lib/conductor/ (docs/BLUEPRINT.md Section 1),
+// which actually mutates state on real events. This is a separate, additive,
+// read-only feature and reusing the name would suggest they're the same
+// system when they aren't.
+model DailyBriefing {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Date-only (stored at UTC midnight) so a unique constraint can enforce
+  // "at most one briefing per org per day" — regenerating replaces it rather
+  // than accumulating duplicates from repeated clicks.
+  briefingDate DateTime
+  content      String // the model's prose response, rendered as-is (escaped, not HTML)
+  modelId      String // e.g. "claude-sonnet-5" — which model produced this, for auditability
+  createdAt    DateTime @default(now())
+
+  @@unique([organizationId, briefingDate])
   @@index([organizationId])
 }
