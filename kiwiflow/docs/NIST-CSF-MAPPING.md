@@ -27,7 +27,7 @@ code.
 | Documented security posture | `SECURITY.md` + this file. Real, but self-written, not board-approved policy. |
 | Named accountable role/security officer | **Gap.** No designated owner exists in any artifact this repo can see. |
 | Risk register / formal risk assessment | **Gap.** The closest thing is the informal gap lists in `SECURITY.md`. |
-| Vendor/supply-chain risk management | **Gap** beyond Dependabot tracking direct npm dependencies (see PROTECT). No process for evaluating the hosting provider, email/SMS providers, etc. |
+| Vendor/supply-chain risk management | **Gap** beyond Dependabot tracking direct npm dependencies (see PROTECT). No process for evaluating the hosting provider, email/SMS providers, the Anthropic API (AI grading estimate), or Xero (accounting sync), etc. |
 | Data retention policy | **Gap** — noted in `SECURITY.md`: `AuditLog`/`LoginAttempt`/`SignupAttempt` retention is currently unbounded. |
 
 ## IDENTIFY (ID)
@@ -35,7 +35,7 @@ code.
 | Area | Status |
 |---|---|
 | Asset inventory | Implicit in `prisma/schema.prisma` and `docs/BLUEPRINT.md` — every data asset is a documented model, not a formal inventory artifact. |
-| Data classification | Informal. Financial (invoices), compliance (spray diary, maturity tests, coolstore logs, biosecurity inspections), wage/hours (`TimeEntry`/`PieceRateRecord` — worker PII plus pay data), and general PII (names/emails/phones) are all identifiable in the schema but not labeled by sensitivity tier anywhere. |
+| Data classification | Informal. Financial (invoices, Xero sync state), compliance (spray diary, maturity tests, coolstore logs, biosecurity inspections, NZGAP/GLOBALG.A.P. certification records), wage/hours (`TimeEntry`/`PieceRateRecord`/`WageTopUp` — worker PII plus pay data), health & safety (`SafetyIncident` — can include injury/medical detail), and general PII (names/emails/phones) are all identifiable in the schema but not labeled by sensitivity tier anywhere. |
 | Tenant/trust boundary mapping | Documented in `SECURITY.md`: application-layer `organizationId` scoping, not database-enforced RLS (the Hatchable deployment differs — real Postgres RLS there). This is the single most important ID-function gap: it means the boundary depends on every query author remembering to scope it. |
 | Third-party dependency inventory | `package.json` + `.github/dependabot.yml` (repo root) — real, automated, current. |
 
@@ -52,14 +52,14 @@ codebase alone lands here.
 | Data-in-transit protection | HTTPS enforced via `Strict-Transport-Security` (`next.config.ts`); `upgrade-insecure-requests` in the CSP. |
 | Platform hardening | CSP, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` (`next.config.ts`) — see `SECURITY.md` for the one known, deliberately-accepted gap (`'unsafe-inline'` in the CSP, and exactly why the stricter nonce-based version was reverted after it broke in testing). |
 | Secure defaults on new features | Server-side re-validation of client input against the actual authorization state on every mutation (e.g. broadcast recipients re-checked against `ContractorLink`, not trusted from the posted form — `app/(app)/broadcasts/actions.ts`). |
-| Secrets management | **Gap** — plain environment variables (`AUTH_SECRET` etc.), no secrets manager or rotation policy. Adequate for the current single-deployment scale, not for a team of engineers with prod access. |
+| Secrets management | **Gap** — plain environment variables (`AUTH_SECRET`, `ANTHROPIC_API_KEY` etc.), no secrets manager or rotation policy. Concretely worse for `Organization.xeroAccessToken`/`xeroRefreshToken` (see `SECURITY.md`): those are plain, unencrypted database columns holding a long-lived credential to a customer's real external accounting system, not just app-internal secrets. Adequate for the current single-deployment scale, not for a team of engineers with prod access, and not for Xero sync moving past scaffold status. |
 | Dependency/vulnerability management | `.github/dependabot.yml`, weekly. One known current advisory tracked honestly in `SECURITY.md` rather than hidden. |
 
 ## DETECT (DE)
 
 | Area | Status |
 |---|---|
-| Security event logging | `lib/audit.ts` → `AuditLog` table: signup, login success/failure, MFA enable/disable/failed attempts, ADMIN cross-org access, material order and job-driver-assignment mutations. Visible in-app (Settings for org-scoped, Admin overview for cross-org). |
+| Security event logging | `lib/audit.ts` → `AuditLog` table: signup, login success/failure, MFA enable/disable/failed attempts, ADMIN cross-org access, material order and job-driver-assignment mutations, minimum-wage top-up payments, health & safety incident reports, certification status changes, and Xero invoice push attempts. Visible in-app (Settings for org-scoped, Admin overview for cross-org). |
 | Domain-event logging | `JobStatusHistory` — a full, timestamped, actor-attributed history independent of `AuditLog`, for the job lifecycle specifically. |
 | Automated vulnerability detection | Dependabot (PROTECT and DETECT overlap here — same control, different lens). |
 | Centralized monitoring / alerting | **Gap.** No SIEM, no anomaly detection, no paging on suspicious activity (e.g. a spike in failed logins is recorded in `LoginAttempt` but nothing currently reads that table proactively). |

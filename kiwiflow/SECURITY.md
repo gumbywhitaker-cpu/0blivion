@@ -70,17 +70,22 @@ NIST Cybersecurity Framework (a self-assessed framework, not a certification
   order creation/status changes, broadcast sends, driver assignment on
   transport jobs, wage/hours entries (`time_entry.logged`,
   `piece_rate.logged`), biosecurity findings
-  (`biosecurity.finding_recorded`), and packhouse grading results
-  (`grading_result.recorded`/`.updated`). Job status changes have their own
-  dedicated `JobStatusHistory` table instead, which already covers that
-  domain in more detail than the generic log needs to duplicate.
+  (`biosecurity.finding_recorded`), packhouse grading results
+  (`grading_result.recorded`/`.updated`), minimum-wage top-up payments
+  (`wage_top_up.recorded`), health & safety incident reports
+  (`safety_incident.reported`), certification status changes
+  (`certification.recorded`/`.status_changed`), and Xero invoice pushes
+  (`xero.invoice_pushed`/`.invoice_push_failed`). Job status changes have
+  their own dedicated `JobStatusHistory` table instead, which already covers
+  that domain in more detail than the generic log needs to duplicate.
 - Audit writes never block or fail the action they're recording — a broken
   audit write logs to stderr rather than breaking a user's login. In a real
   deployment, stderr needs to go to a monitored log sink, not vanish.
 - Visible in-app: every user sees their own org's recent security activity
   in Settings; ADMIN sees the cross-org feed on the Admin overview page.
 - **Gap**: `HarvestMaturityTest` and `SprayDiaryEntry` creation, and invoice
-  generation/org settings changes, still aren't writing to this log.
+  generation/status transitions (send/mark-paid) and org settings changes,
+  still aren't writing to this log — only the newer Xero push action is.
   Extend `recordAuditLog()` calls to those action files as they come up for
   review.
 
@@ -141,6 +146,29 @@ NIST Cybersecurity Framework (a self-assessed framework, not a certification
   be called a real data retention policy.
 - CSV export endpoints (`app/api/v1/export/*.csv`) are session-gated and
   organization-scoped like everything else in `app/(app)/`.
+- **Minimum-wage top-up data** (`WageTopUp`) and **health & safety incident
+  reports** (`SafetyIncident`) are worker PII in the same sense as
+  `TimeEntry`/`PieceRateRecord` above — org-scoped like everything else, no
+  separate access tier. `SafetyIncident.injuryInvolved` and free-text
+  `description`/`actionTaken` fields can contain sensitive personal/medical
+  detail (an injury description); a `CRITICAL` severity report is only ever
+  a heads-up that the finding *may* meet the Health and Safety at Work Act
+  2015's definition of a notifiable event — KiwiFlow does not submit
+  anything to WorkSafe, and this must never be represented to a customer as
+  a compliance action having been taken.
+- **Xero OAuth tokens** (`Organization.xeroAccessToken`/`xeroRefreshToken`)
+  are stored as plain columns with no field-level encryption — the same gap
+  as `AUTH_SECRET` below, but concretely worse here: a refresh token is a
+  long-lived credential to a customer's real accounting system, not just to
+  this app. This needs a real secrets-at-rest story (column-level encryption
+  or a secrets manager with envelope encryption) before Xero sync goes from
+  scaffold to something a real customer connects a production Xero org to.
+- **AI grading photos** (`lib/aiGrading.ts`): sent to the Anthropic Messages
+  API as part of a single request for a one-off visual estimate, never
+  written to disk or a database column on this app's side. Subject to
+  Anthropic's own data-handling terms for API traffic, not this app's —
+  that's a real third-party data flow worth disclosing to a customer even
+  though nothing is retained here.
 - No field-level encryption beyond what SQLite/the hosting platform provides
   at rest, and no secrets manager — `AUTH_SECRET` and friends are plain
   environment variables (`.env.example`). Fine for the current single-app
