@@ -43,6 +43,20 @@ model Organization {
   xeroRefreshToken String?
   xeroTokenExpires DateTime?
 
+  // MYOB AccountRight accounting sync (lib/myob.ts) — same OAuth2 token
+  // shape as Xero, plus a company-file UID (MYOB's "which business" concept
+  // separate from the OAuth account) and company-file-level credentials.
+  // MYOB AccountRight company files require this second, separate login on
+  // top of the OAuth token (see lib/myob.ts's header comment for why) — not
+  // something Xero needs, so it has no equivalent above. Same plain-text
+  // storage as every other secret in this codebase today.
+  myobCompanyFileUid String?
+  myobAccessToken    String?
+  myobRefreshToken   String?
+  myobTokenExpires   DateTime?
+  myobCfUsername     String?
+  myobCfPassword     String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -671,6 +685,9 @@ model Invoice {
   // of creating a duplicate in Xero.
   xeroInvoiceId String?
   xeroSyncedAt  DateTime?
+  // Same purpose as xeroInvoiceId/xeroSyncedAt, for MYOB's Sale/Invoice UID.
+  myobInvoiceUid String?
+  myobSyncedAt   DateTime?
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 

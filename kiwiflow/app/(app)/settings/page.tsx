@@ -3,17 +3,20 @@ import { prisma } from "@/lib/db";
 import { totpUri } from "@/lib/auth/totp";
 import { generateQrDataUrl } from "@/lib/qr";
 import { isXeroConfigured } from "@/lib/xero";
+import { isMyobConfigured } from "@/lib/myob";
 import { disconnectXeroAction } from "./xeroActions";
+import { disconnectMyobAction } from "./myobActions";
 import { SettingsForm } from "./SettingsForm";
 import { MfaSettings } from "./MfaSettings";
+import { MyobCredentialsForm } from "./MyobCredentialsForm";
 
 export default async function SettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ xero?: string }>;
+  searchParams: Promise<{ xero?: string; myob?: string }>;
 }) {
   const session = await requireSession();
-  const { xero } = await searchParams;
+  const { xero, myob } = await searchParams;
 
   const [org, user, auditLog] = await Promise.all([
     prisma.organization.findUniqueOrThrow({ where: { id: session.organizationId } }),
@@ -87,6 +90,45 @@ export default async function SettingsPage({
             className="btn inline-block rounded-md bg-kf-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-kf-green-700"
           >
             Connect to Xero
+          </a>
+        )}
+      </div>
+
+      <div>
+        <h2 className="mb-1 text-xl font-semibold text-kf-charcoal">MYOB</h2>
+        <p className="mb-4 text-kf-muted">
+          Connect MYOB AccountRight to push issued invoices over as draft accounting entries. This is a
+          scaffold — it needs the operator&apos;s own MYOB Developer app credentials configured on this
+          deployment.
+        </p>
+        {myob === "connected" ? (
+          <p className="mb-3 text-sm font-medium text-kf-green-600">Connected to MYOB.</p>
+        ) : myob === "error" ? (
+          <p className="mb-3 text-sm font-medium text-kf-red">Couldn&apos;t connect to MYOB — try again.</p>
+        ) : null}
+        {!isMyobConfigured() ? (
+          <p className="rounded-lg border border-dashed border-kf-border bg-kf-card p-4 text-sm text-kf-muted">
+            MYOB isn&apos;t configured on this deployment (MYOB_CLIENT_ID / MYOB_CLIENT_SECRET /
+            MYOB_REDIRECT_URI aren&apos;t set).
+          </p>
+        ) : org.myobCompanyFileUid ? (
+          <div className="flex flex-col gap-4">
+            <form action={disconnectMyobAction}>
+              <button
+                type="submit"
+                className="btn rounded-md border border-kf-border px-4 py-2 text-sm font-semibold hover:bg-kf-red/10 hover:text-kf-red"
+              >
+                Disconnect MYOB
+              </button>
+            </form>
+            <MyobCredentialsForm hasCredentials={Boolean(org.myobCfUsername)} />
+          </div>
+        ) : (
+          <a
+            href="/api/myob/connect"
+            className="btn inline-block rounded-md bg-kf-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-kf-green-700"
+          >
+            Connect to MYOB
           </a>
         )}
       </div>
