@@ -163,6 +163,12 @@ NIST Cybersecurity Framework (a self-assessed framework, not a certification
   this app. This needs a real secrets-at-rest story (column-level encryption
   or a secrets manager with envelope encryption) before Xero sync goes from
   scaffold to something a real customer connects a production Xero org to.
+- **MYOB company-file credentials** (`Organization.myobCfUsername`/
+  `myobCfPassword`): the same gap as Xero's tokens above, and arguably
+  worse — this is a plaintext username/password pair (MYOB's own
+  company-file sign-in, separate from the OAuth connection), not just an
+  opaque token. Same fix needed before this goes from scaffold to
+  production: encrypt at rest, don't store the plaintext password at all.
 - **AI grading photos** (`lib/aiGrading.ts`): sent to the Anthropic Messages
   API as part of a single request for a one-off visual estimate, never
   written to disk or a database column on this app's side. Subject to
