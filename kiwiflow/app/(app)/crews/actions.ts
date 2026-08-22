@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/auth/session";
 import { assertCanManage } from "@/lib/auth/requireRole";
 import { EMPLOYMENT_TYPES } from "@/lib/types";
+import { recordAuditLog } from "@/lib/audit";
 
 export type FormState = { error?: string } | undefined;
 
@@ -107,7 +108,7 @@ export async function logTimeEntryAction(_prev: FormState, formData: FormData): 
 
   const breakMins = breakMinutes ? Number.parseInt(breakMinutes, 10) : 0;
 
-  await prisma.timeEntry.create({
+  const entry = await prisma.timeEntry.create({
     data: {
       crewMemberId,
       jobId: jobId || null,
@@ -116,6 +117,15 @@ export async function logTimeEntryAction(_prev: FormState, formData: FormData): 
       breakMinutes: Number.isFinite(breakMins) ? breakMins : 0,
       notes: notes || null,
     },
+  });
+
+  await recordAuditLog({
+    organizationId: session.organizationId,
+    actorId: session.userId,
+    action: "time_entry.logged",
+    entityType: "TimeEntry",
+    entityId: entry.id,
+    detail: { crewMemberId, clockIn: clockInDate.toISOString(), clockOut: clockOutDate?.toISOString() ?? null },
   });
 
   revalidatePath(`/crews/${member.crewId}/members/${crewMemberId}`);
@@ -150,7 +160,7 @@ export async function logPieceRateAction(_prev: FormState, formData: FormData): 
   const rate = Number.parseFloat(ratePerUnit);
   if (!Number.isFinite(qty) || !Number.isFinite(rate)) return { error: "Invalid quantity or rate" };
 
-  await prisma.pieceRateRecord.create({
+  const record = await prisma.pieceRateRecord.create({
     data: {
       crewMemberId,
       jobId: jobId || null,
@@ -161,6 +171,15 @@ export async function logPieceRateAction(_prev: FormState, formData: FormData): 
       amount: qty * rate,
       notes: notes || null,
     },
+  });
+
+  await recordAuditLog({
+    organizationId: session.organizationId,
+    actorId: session.userId,
+    action: "piece_rate.logged",
+    entityType: "PieceRateRecord",
+    entityId: record.id,
+    detail: { crewMemberId, unit, quantity: qty, amount: record.amount },
   });
 
   revalidatePath(`/crews/${member.crewId}/members/${crewMemberId}`);

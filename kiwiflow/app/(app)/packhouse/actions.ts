@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/auth/session";
+import { recordAuditLog } from "@/lib/audit";
 
 export type FormState = { error?: string } | undefined;
 
@@ -61,13 +62,23 @@ export async function recordGradingResultAction(_prev: FormState, formData: Form
     recordedById: session.userId,
   };
 
+  let result;
   if (existing) {
-    await prisma.gradingResult.update({ where: { id: existing.id }, data: values });
+    result = await prisma.gradingResult.update({ where: { id: existing.id }, data: values });
   } else {
-    await prisma.gradingResult.create({
+    result = await prisma.gradingResult.create({
       data: { jobId: job.id, organizationId: session.organizationId, ...values },
     });
   }
+
+  await recordAuditLog({
+    organizationId: session.organizationId,
+    actorId: session.userId,
+    action: existing ? "grading_result.updated" : "grading_result.recorded",
+    entityType: "GradingResult",
+    entityId: result.id,
+    detail: { jobId: job.id, totalTrayEquivalents },
+  });
 
   revalidatePath("/packhouse");
   revalidatePath(`/jobs/${job.id}`);

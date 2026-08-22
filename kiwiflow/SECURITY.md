@@ -67,24 +67,22 @@ NIST Cybersecurity Framework (a self-assessed framework, not a certification
 - `lib/audit.ts` writes to the `AuditLog` table (organization-scoped actor,
   action, entity, timestamp, JSON detail) for: signup, login success/failure,
   MFA enable/disable/failed-verification, ADMIN cross-org access, material
-  order creation/status changes, broadcast sends, and driver assignment on
-  transport jobs. Job status changes have their own dedicated
-  `JobStatusHistory` table instead, which already covers that domain in more
-  detail than the generic log needs to duplicate.
+  order creation/status changes, broadcast sends, driver assignment on
+  transport jobs, wage/hours entries (`time_entry.logged`,
+  `piece_rate.logged`), biosecurity findings
+  (`biosecurity.finding_recorded`), and packhouse grading results
+  (`grading_result.recorded`/`.updated`). Job status changes have their own
+  dedicated `JobStatusHistory` table instead, which already covers that
+  domain in more detail than the generic log needs to duplicate.
 - Audit writes never block or fail the action they're recording — a broken
   audit write logs to stderr rather than breaking a user's login. In a real
   deployment, stderr needs to go to a monitored log sink, not vanish.
 - Visible in-app: every user sees their own org's recent security activity
   in Settings; ADMIN sees the cross-org feed on the Admin overview page.
-- **Gap**: business-critical mutations outside auth/admin/materials (invoice
-  generation, compliance record edits, org settings changes) aren't yet
-  writing to this log. Extend `recordAuditLog()` calls to those action files
-  as they come up for review. This now explicitly includes the three
-  compliance-adjacent features added after the initial build: wage/hours
-  entries (`TimeEntry`/`PieceRateRecord`), biosecurity findings
-  (`BiosecurityInspection`), and packhouse grading results
-  (`GradingResult`) — none of these write to `AuditLog` yet, same gap as
-  spray diary/maturity testing before them.
+- **Gap**: `HarvestMaturityTest` and `SprayDiaryEntry` creation, and invoice
+  generation/org settings changes, still aren't writing to this log.
+  Extend `recordAuditLog()` calls to those action files as they come up for
+  review.
 
 ## API routes outside the Server Action model
 

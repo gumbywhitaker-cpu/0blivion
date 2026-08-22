@@ -13,6 +13,7 @@ import {
   BIOSECURITY_RISK_LEVELS,
 } from "@/lib/types";
 import { notifyOrgOwners } from "@/lib/notify";
+import { recordAuditLog } from "@/lib/audit";
 
 export type FormState = { error?: string } | undefined;
 
@@ -220,7 +221,7 @@ export async function recordBiosecurityInspectionAction(_prev: FormState, formDa
   const followUpRequired = data.followUpRequired === "on";
   const followUpDate = followUpRequired && data.followUpDate ? new Date(data.followUpDate) : null;
 
-  await prisma.biosecurityInspection.create({
+  const inspection = await prisma.biosecurityInspection.create({
     data: {
       orchardId: data.orchardId,
       inspectionDate: new Date(data.inspectionDate),
@@ -232,6 +233,15 @@ export async function recordBiosecurityInspectionAction(_prev: FormState, formDa
       followUpDate,
       inspectedById: session.userId,
     },
+  });
+
+  await recordAuditLog({
+    organizationId: session.organizationId,
+    actorId: session.userId,
+    action: "biosecurity.finding_recorded",
+    entityType: "BiosecurityInspection",
+    entityId: inspection.id,
+    detail: { orchardId: data.orchardId, category: data.category, riskLevel: data.riskLevel },
   });
 
   if (data.riskLevel === "HIGH") {
