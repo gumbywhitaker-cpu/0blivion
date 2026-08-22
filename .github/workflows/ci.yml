@@ -35,6 +35,13 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
+      - name: Generate Next.js route types
+        # tsc alone can't see LayoutProps/PageProps -- those are ambient
+        # types Next.js writes to .next/types, normally produced as a side
+        # effect of `next dev`/`next build`. `next typegen` does just that
+        # without a full build, so a fresh checkout typechecks correctly.
+        run: npx next typegen
+
       - name: Typecheck
         run: npx tsc --noEmit
 
