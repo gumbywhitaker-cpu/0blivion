@@ -216,7 +216,7 @@ model CrewMember {
   isRse                     Boolean @default(false)
   hourlyRate                Float?
   minGuaranteedHoursPerWeek Float?
-  minimumWageType           String  @default("ADULT") // ADULT | STARTING_OUT_TRAINING — see MINIMUM_WAGE_REFERENCE_RATES
+  minimumWageType           String  @default("ADULT") // ADULT | STARTING_OUT_TRAINING | RSE_RETURNING_WORKER — see MINIMUM_WAGE_REFERENCE_RATES
 
   createdAt DateTime @default(now())
 

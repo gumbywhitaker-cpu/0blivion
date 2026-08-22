@@ -113,7 +113,7 @@ export const COOLSTORE_REFERENCE_RANGE_C = { min: -1, max: 1 };
 export const EMPLOYMENT_TYPES = ["HOURLY", "PIECE_RATE", "SALARY", "MIXED"] as const;
 export type EmploymentType = (typeof EMPLOYMENT_TYPES)[number];
 
-export const MINIMUM_WAGE_TYPES = ["ADULT", "STARTING_OUT_TRAINING"] as const;
+export const MINIMUM_WAGE_TYPES = ["ADULT", "STARTING_OUT_TRAINING", "RSE_RETURNING_WORKER"] as const;
 export type MinimumWageType = (typeof MINIMUM_WAGE_TYPES)[number];
 
 /**
@@ -123,10 +123,24 @@ export type MinimumWageType = (typeof MINIMUM_WAGE_TYPES)[number];
  * must keep current each year, not a live government feed. KiwiFlow has no
  * integration with MBIE/Employment NZ — every WageTopUp record snapshots
  * the rate it was actually computed against, for audit purposes.
+ *
+ * RSE_RETURNING_WORKER is a *different* floor from the general Minimum Wage
+ * Act one: Immigration NZ's RSE Instructions require an RSE worker in their
+ * 3rd or later season to be paid at least the adult minimum wage plus 10%
+ * (immigration.govt.nz, "Pay and sick leave entitlements for RSE workers").
+ * This is an immigration/visa-compliance requirement on top of employment
+ * law, not itself the Minimum Wage Act floor — still worth checking here
+ * since a piece-rate returning RSE worker under-topped-up against the plain
+ * adult rate would still be short of what their Agreement to Recruit
+ * actually requires. Derived from ADULT so it tracks automatically if that
+ * changes; confirm the 10% figure against the current RSE Instructions
+ * before relying on it, the same as every other rate in this file.
  */
+const ADULT_MINIMUM_WAGE = 23.95;
 export const MINIMUM_WAGE_REFERENCE_RATES: Record<MinimumWageType, number> = {
-  ADULT: 23.95,
+  ADULT: ADULT_MINIMUM_WAGE,
   STARTING_OUT_TRAINING: 19.16,
+  RSE_RETURNING_WORKER: Math.round(ADULT_MINIMUM_WAGE * 1.1 * 100) / 100,
 };
 
 export const BIOSECURITY_CATEGORIES = ["PSA", "BMSB", "OTHER_PEST", "OTHER_DISEASE", "GENERAL"] as const;

@@ -84,6 +84,7 @@ export function AddMemberForm({ crewId }: { crewId: string }) {
         >
           <option value="ADULT">Adult</option>
           <option value="STARTING_OUT_TRAINING">Starting-out / training</option>
+          <option value="RSE_RETURNING_WORKER">RSE returning worker (3rd+ season, min wage +10%)</option>
         </select>
       </div>
       <label className="flex items-center gap-2 text-sm font-medium text-kf-charcoal">
