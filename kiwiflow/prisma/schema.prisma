@@ -515,6 +515,10 @@ model Certification {
   issuedDate        DateTime?
   expiryDate        DateTime?
   notes             String?
+  // Dedup guard for the expiry-warning check (lib/certificationExpiry.ts):
+  // re-warn at most weekly during the 30-day window rather than on every
+  // page load that happens to trigger the check.
+  expiryWarnedAt    DateTime?
   createdById       String
   createdBy         User      @relation("CertificationCreatedBy", fields: [createdById], references: [id])
   createdAt         DateTime  @default(now())

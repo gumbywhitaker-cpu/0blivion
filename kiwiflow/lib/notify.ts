@@ -6,17 +6,43 @@ import type { NotificationUrgency } from "@/lib/types";
  *   NORMAL   -> in-app only
  *   URGENT   -> in-app + email
  *   CRITICAL -> in-app + email + SMS
- * Only in-app is implemented. Email/SMS adapters below fail closed (log + no-op)
- * rather than throwing, so a missing provider key never blocks the operation that
- * triggered the notification (e.g. marking a job complete).
+ * Email is wired to Resend (api.resend.com/emails) below. SMS remains a stub.
+ * Both fail closed (log + no-op) rather than throwing, so a missing provider
+ * key never blocks the operation that triggered the notification (e.g.
+ * marking a job complete) — same adapter-point pattern as lib/aiGrading.ts.
  */
 
-async function sendEmail(_to: string, _subject: string, _body: string): Promise<void> {
-  if (!process.env.EMAIL_PROVIDER_API_KEY) {
+async function sendEmail(to: string, subject: string, body: string): Promise<void> {
+  const apiKey = process.env.EMAIL_PROVIDER_API_KEY;
+  if (!apiKey) {
     console.warn("[notify] EMAIL_PROVIDER_API_KEY not configured — email not sent");
     return;
   }
-  // Adapter point: wire a real provider (e.g. Resend, SES) here.
+  // EMAIL_FROM_ADDRESS must be on a domain verified in the Resend dashboard
+  // for real delivery beyond Resend's own test inbox — see .env.example.
+  const from = process.env.EMAIL_FROM_ADDRESS || "KiwiFlow <onboarding@resend.dev>";
+
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        from,
+        to: [to],
+        subject,
+        html: `<p>${body.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>`,
+      }),
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      console.error("[notify] Resend send failed", { status: response.status, body: text.slice(0, 300) });
+    }
+  } catch (err) {
+    console.error("[notify] Resend send threw", err);
+  }
 }
 
 async function sendSms(_to: string, _body: string): Promise<void> {

@@ -5,6 +5,7 @@ import { requireSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { logoutAction } from "../(auth)/actions";
 import { OfflineIndicator } from "@/lib/offline/OfflineIndicator";
+import { checkCertificationExpiries } from "@/lib/certificationExpiry";
 
 function navForSession(orgType: string, role: string): { href: string; label: string }[] {
   // Role checked first: a DRIVER's nav is the same regardless of whether
@@ -64,6 +65,12 @@ function navForSession(orgType: string, role: string): { href: string; label: st
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const session = await requireSession();
+  // Certifications belong to orchards, which only growers own — cheap
+  // no-op query on the common "nothing due this week" path (see
+  // lib/certificationExpiry.ts for the re-warn dedup).
+  if (session.orgType === "GROWER") {
+    await checkCertificationExpiries(session.organizationId);
+  }
   const unreadCount = await prisma.notification.count({
     where: { userId: session.userId, read: false },
   });
