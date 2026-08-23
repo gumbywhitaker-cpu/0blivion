@@ -14,6 +14,19 @@ SQLite locally / Postgres-ready in production.
 
 ## Getting started
 
+**On Windows?** See [`docs/WINDOWS_INSTALL.md`](docs/WINDOWS_INSTALL.md) for a
+step-by-step guide (including a script that does the below for you). The
+short version, from PowerShell:
+
+```powershell
+git clone https://github.com/gumbywhitaker-cpu/0blivion.git
+cd 0blivion\kiwiflow
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\scripts\windows-setup.ps1
+```
+
+On macOS/Linux, or to run the steps yourself on any platform:
+
 ```bash
 npm install
 cp .env.example .env        # then set a real AUTH_SECRET
