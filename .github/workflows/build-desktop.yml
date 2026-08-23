@@ -55,7 +55,7 @@ jobs:
 
       - name: Install desktop packaging dependencies
         working-directory: kiwiflow/desktop
-        run: npm ci
+        run: npm install
 
       - name: Assemble app resources
         working-directory: kiwiflow/desktop
