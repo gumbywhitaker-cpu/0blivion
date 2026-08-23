@@ -12,7 +12,18 @@ jobs:
     # Must run on real Windows: better-sqlite3's native binary has to be
     # compiled on the same OS/arch it will run on, and Windows-native
     # compilation isn't reliably cross-buildable from Linux/macOS.
-    runs-on: windows-latest
+    #
+    # Pinned to windows-2022, not windows-latest: a real run against
+    # windows-latest (2026-08-23) failed npm ci itself, before this
+    # workflow's own steps even started, because that label had rolled
+    # onto a newer "windows-2025-vs2026" preview image whose Visual
+    # Studio reports a version string node-gyp's detector doesn't
+    # recognize ("could not find a version of Visual Studio 2017 or
+    # newer" despite VS actually being installed) -- better-sqlite3 had
+    # no prebuilt binary for this combination and fell back to
+    # compiling from source. windows-2022 has a well-established VS2022
+    # toolchain node-gyp reliably detects.
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
 
