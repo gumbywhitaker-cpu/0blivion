@@ -3,6 +3,7 @@ import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { RoundedBox } from '@react-three/drei'
 import { useHighlightRef } from '../../state/HighlightContext'
+import { IndustrialMaterial } from './IndustrialMaterial'
 
 const BODY = '#3a3d44'
 const PANEL = '#24262b'
@@ -47,7 +48,7 @@ export default function DryingTunnel() {
   return (
     <group>
       <RoundedBox args={[1.7, 0.95, 1.15]} radius={0.06} smoothness={4} castShadow receiveShadow>
-        <meshStandardMaterial color={BODY} roughness={0.45} metalness={0.55} />
+        <IndustrialMaterial name="brushed-steel" fallbackColor={BODY} roughness={0.45} metalness={0.55} />
       </RoundedBox>
 
       {/* removable access panel */}

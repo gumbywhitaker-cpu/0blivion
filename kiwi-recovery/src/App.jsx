@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, Suspense } from 'react'
 import { Canvas } from '@react-three/fiber'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
@@ -99,7 +99,9 @@ export default function App() {
             camera={{ fov: 38, near: 0.1, far: 100 }}
             gl={{ antialias: true, toneMappingExposure: 1.4 }}
           >
-            <MachineScene hoveredId={hoveredId} onHover={setHoveredId} onSelect={handleNavigate} />
+            <Suspense fallback={null}>
+              <MachineScene hoveredId={hoveredId} onHover={setHoveredId} onSelect={handleNavigate} />
+            </Suspense>
           </Canvas>
 
           <div className="hud">

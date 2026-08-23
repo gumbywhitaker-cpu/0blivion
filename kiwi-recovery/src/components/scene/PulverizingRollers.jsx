@@ -1,6 +1,7 @@
 import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { useHighlightRef } from '../../state/HighlightContext'
+import { IndustrialMaterial } from './IndustrialMaterial'
 
 const BODY = '#3a3d44'
 const STEEL_DARK = '#24262b'
@@ -41,7 +42,7 @@ export default function PulverizingRollers() {
     <group>
       <mesh position={[0, -0.05, 0]} castShadow receiveShadow>
         <boxGeometry args={[0.95, 1.0, 1.0]} />
-        <meshStandardMaterial color={BODY} roughness={0.5} metalness={0.5} />
+        <IndustrialMaterial name="brushed-steel" fallbackColor={BODY} roughness={0.5} metalness={0.5} />
       </mesh>
 
       {/* maintenance access + safety shield -- kept translucent enough that

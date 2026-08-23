@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import * as THREE from 'three'
+import { IndustrialMaterial } from './IndustrialMaterial'
 
 const STEEL = new THREE.Color('#3d4046')
 const STEEL_DARK = new THREE.Color('#24262b')
@@ -11,7 +12,7 @@ function Wheel({ position }) {
     <group position={position}>
       <mesh castShadow receiveShadow rotation={[0, 0, Math.PI / 2]}>
         <cylinderGeometry args={[0.42, 0.42, 0.28, 20]} />
-        <meshStandardMaterial color={RUBBER} roughness={0.9} metalness={0.1} />
+        <IndustrialMaterial name="rubber" fallbackColor={RUBBER} roughness={0.9} metalness={0.1} />
       </mesh>
       <mesh rotation={[0, 0, Math.PI / 2]}>
         <cylinderGeometry args={[0.2, 0.2, 0.3, 8]} />
@@ -35,7 +36,7 @@ export default function Chassis() {
       {/* deck */}
       <mesh position={[0, 0.62, 0]} castShadow receiveShadow>
         <boxGeometry args={[9.4, 0.14, 1.9]} />
-        <meshStandardMaterial color="#3a3d43" roughness={0.55} metalness={0.6} />
+        <IndustrialMaterial name="tread-plate" fallbackColor="#3a3d43" roughness={0.55} metalness={0.6} />
       </mesh>
 
       {/* main chassis rails */}
