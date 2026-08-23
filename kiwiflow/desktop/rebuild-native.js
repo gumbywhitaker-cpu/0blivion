@@ -18,5 +18,7 @@ console.log(`Rebuilding better-sqlite3 for Electron ${electronVersion} in ${modu
 execFileSync(
   rebuildBin,
   ["--force", "--which-module", "better-sqlite3", "--version", electronVersion, "--module-dir", moduleDir],
-  { stdio: "inherit" },
+  // Node hardened spawning .cmd/.bat files on Windows (CVE-2024-27980) —
+  // it now requires shell:true to invoke them directly, or it throws EINVAL.
+  { stdio: "inherit", shell: process.platform === "win32" },
 );
