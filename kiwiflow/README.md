@@ -7,6 +7,23 @@ paperwork.
 Read [`docs/BLUEPRINT.md`](docs/BLUEPRINT.md) first — it's the architecture behind this
 code, including what's deliberately deferred and why.
 
+## Install the app (Windows, macOS, Android, iOS)
+
+The live app installs straight from the browser — no app store, nothing to
+download and run — at **https://kiwiflow.hatchable.site**. Open it, then:
+
+- **Windows / macOS (Chrome or Edge)** — click the install icon in the
+  address bar, or **⋮ menu → Install KiwiFlow…**
+- **Android (Chrome)** — **⋮ menu → Add to Home screen / Install app**
+- **iPhone/iPad (Safari)** — Share icon → **Add to Home Screen**
+
+Full step-by-step per platform: [`docs/INSTALL_APP.md`](docs/INSTALL_APP.md).
+
+That's a real install (own icon, own window, works offline for the field
+pages) via the web-app-install standard every OS above supports — it is
+*not* a native `.exe`/`.apk`/App Store app, and `docs/INSTALL_APP.md`
+explains why that's a materially different (and much larger) project.
+
 ## Stack
 
 Next.js 16 (App Router, Server Actions) · TypeScript · Tailwind CSS 4 · Prisma 7 ·
