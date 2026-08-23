@@ -1,0 +1,956 @@
+// KiwiFlow data model — see docs/BLUEPRINT.md Section 4 for design notes.
+//
+// Status fields are plain Strings, not Prisma enums, on purpose: SQLite (local dev)
+// and PostgreSQL (production) both support String identically, so the datasource can
+// be swapped with a single line here + DATABASE_URL. Allowed values are enforced by
+// TypeScript union types + zod at the application layer (lib/types.ts).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ---------------------------------------------------------------------------
+// Tenancy & Identity
+// ---------------------------------------------------------------------------
+
+model Organization {
+  id        String  @id @default(cuid())
+  name      String
+  type      String // GROWER | CONTRACTOR | TRANSPORT | PACKHOUSE | ACCOUNTANT | ADMIN
+  region    String?
+  // Taxable Supply Information fields (docs/BLUEPRINT.md Section 20): IRD requires
+  // the supplier's GST number on any invoice over $200, and address/phone/email/NZBN
+  // is one acceptable way to identify the buyer on invoices over $1,000. Both nullable
+  // because a brand-new org hasn't filled them in yet — the invoice UI warns instead
+  // of silently producing a non-compliant document.
+  gstNumber String?
+  address   String?
+  phone     String?
+
+  // Xero accounting sync (lib/xero.ts) — OAuth2 tokens for this org's
+  // connected Xero organisation. Nullable because most orgs won't connect
+  // one; presence of xeroTenantId is what the UI treats as "connected".
+  // Plain-text at rest like every other secret in this codebase today (see
+  // SECURITY.md's existing "no field-level encryption" gap) — not a new
+  // exception, the same one, extended to a new kind of secret.
+  xeroTenantId     String?
+  xeroAccessToken  String?
+  xeroRefreshToken String?
+  xeroTokenExpires DateTime?
+
+  // MYOB AccountRight accounting sync (lib/myob.ts) — same OAuth2 token
+  // shape as Xero, plus a company-file UID (MYOB's "which business" concept
+  // separate from the OAuth account) and company-file-level credentials.
+  // MYOB AccountRight company files require this second, separate login on
+  // top of the OAuth token (see lib/myob.ts's header comment for why) — not
+  // something Xero needs, so it has no equivalent above. Same plain-text
+  // storage as every other secret in this codebase today.
+  myobCompanyFileUid String?
+  myobAccessToken    String?
+  myobRefreshToken   String?
+  myobTokenExpires   DateTime?
+  myobCfUsername     String?
+  myobCfPassword     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users                      User[]
+  orchards                   Orchard[]
+  crews                      Crew[]
+  jobsAsGrower               Job[]                     @relation("GrowerJobs")
+  jobsAsContractor           Job[]                     @relation("ContractorJobs")
+  jobsAsDestination          Job[]                     @relation("JobDestination")
+  invoicesIssued             Invoice[]                 @relation("InvoiceFrom")
+  invoicesReceived           Invoice[]                 @relation("InvoiceTo")
+  notifications              Notification[]
+  events                     Event[]
+  workflowRules              WorkflowRule[]
+  onboardingInvites          OnboardingInvite[]
+  documents                  Document[]
+  auditLogs                  AuditLog[]
+  linksAsGrower              ContractorLink[]          @relation("GrowerLinks")
+  linksAsContractor          ContractorLink[]          @relation("ContractorLinks")
+  coolstoreTemperatureLogs   CoolstoreTemperatureLog[]
+  suppliers                  Supplier[]
+  materialOrders             MaterialOrder[]
+  broadcastsSent             Broadcast[]               @relation("BroadcastSender")
+  broadcastsReceived         BroadcastRecipient[]      @relation("BroadcastRecipientOrg")
+  gradingResultsRecorded     GradingResult[]
+  exportShipmentsAsPackhouse ExportShipment[]          @relation("ExportShipmentPackhouse")
+  exportShipmentsAsTransport ExportShipment[]          @relation("ExportShipmentTransport")
+  dailyBriefings             DailyBriefing[]
+
+  @@index([type])
+}
+
+model User {
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name            String
+  email           String       @unique
+  passwordHash    String
+  role            String // OWNER | MANAGER | FIELD | DRIVER | VIEWER
+  phone           String?
+  // TOTP MFA (docs/BLUEPRINT.md Section 25). totpSecret is set as soon as setup
+  // starts but totpEnabled stays false until the user proves their authenticator
+  // app actually works by submitting one correct code — never flip this on
+  // unconfirmed, or a typo'd QR scan permanently locks someone out.
+  totpSecret      String?
+  totpEnabled     Boolean      @default(false)
+  totpBackupCodes String? // JSON array of bcrypt-hashed single-use recovery codes
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  jobsCreated                    Job[]                         @relation("JobCreatedBy")
+  jobsAssignedAsDriver           Job[]                         @relation("JobAssignedDriver")
+  statusChanges                  JobStatusHistory[]            @relation("StatusChangedBy")
+  notifications                  Notification[]
+  auditLogs                      AuditLog[]
+  crewMemberLink                 CrewMember?
+  maturityTestsRecorded          HarvestMaturityTest[]         @relation("MaturityTestRecordedBy")
+  sprayEntriesRecorded           SprayDiaryEntry[]             @relation("SprayEntryApplicator")
+  coolstoreLogsRecorded          CoolstoreTemperatureLog[]     @relation("CoolstoreLogRecordedBy")
+  materialOrdersCreated          MaterialOrder[]               @relation("MaterialOrderCreatedBy")
+  broadcastsCreated              Broadcast[]                   @relation("BroadcastCreatedBy")
+  biosecurityInspectionsRecorded BiosecurityInspection[]       @relation("BiosecurityInspectionInspector")
+  gradingResultsRecorded         GradingResult[]               @relation("GradingResultRecordedBy")
+  wageTopUpsComputed             WageTopUp[]                   @relation("WageTopUpComputedBy")
+  safetyIncidentsReported        SafetyIncident[]              @relation("SafetyIncidentReporter")
+  certificationsCreated          Certification[]               @relation("CertificationCreatedBy")
+  exportShipmentsCreated         ExportShipment[]              @relation("ExportShipmentCreatedBy")
+  exportStatusChanges            ExportShipmentStatusHistory[] @relation("ExportStatusChangedBy")
+
+  @@index([organizationId])
+}
+
+// Login rate limiting (docs/BLUEPRINT.md Section 15/24). Deliberately scoped to
+// per-email fail-closed lockout, not IP-based or distributed-cache-backed — this
+// is a single-instance MVP, and a DB table is the honest, no-new-infra way to
+// close the brute-force gap that mattered most: the login form itself had none.
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  email     String
+  succeeded Boolean
+  createdAt DateTime @default(now())
+
+  @@index([email, createdAt])
+}
+
+// Signup-flood protection (docs/BLUEPRINT.md Section 24). IP-based, not
+// email-based like LoginAttempt: an attacker flooding signups is creating many
+// DIFFERENT fake accounts, not attacking one — email has no shared signal to
+// key on, IP does. ip is nullable because it comes from a best-effort header
+// (see lib/auth/rateLimit.ts) that isn't guaranteed present in every hosting
+// environment; a missing IP falls back to a shared bucket rather than no limit.
+model SignupAttempt {
+  id        String   @id @default(cuid())
+  ip        String
+  createdAt DateTime @default(now())
+
+  @@index([ip, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Pillar 1 — Customer Database
+// ---------------------------------------------------------------------------
+
+model Orchard {
+  id             String       @id @default(cuid())
+  organizationId String // owning grower org
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  region         String?
+  address        String?
+  hectares       Float?
+  notes          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  jobs                   Job[]
+  maturityTests          HarvestMaturityTest[]
+  sprayEntries           SprayDiaryEntry[]
+  materialOrders         MaterialOrder[]
+  biosecurityInspections BiosecurityInspection[]
+  safetyIncidents        SafetyIncident[]
+  certifications         Certification[]
+
+  @@index([organizationId])
+}
+
+// Explicit link between a grower org and a contractor org — cross-org visibility
+// only exists through an ACTIVE row here (see docs/BLUEPRINT.md Section 3).
+model ContractorLink {
+  id              String       @id @default(cuid())
+  growerOrgId     String
+  growerOrg       Organization @relation("GrowerLinks", fields: [growerOrgId], references: [id], onDelete: Cascade)
+  contractorOrgId String
+  contractorOrg   Organization @relation("ContractorLinks", fields: [contractorOrgId], references: [id], onDelete: Cascade)
+  status          String       @default("ACTIVE") // ACTIVE | SUSPENDED
+  createdAt       DateTime     @default(now())
+
+  @@unique([growerOrgId, contractorOrgId])
+  @@index([contractorOrgId])
+}
+
+model Crew {
+  id             String       @id @default(cuid())
+  organizationId String // owning contractor org
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  members CrewMember[]
+  jobs    Job[]
+
+  @@index([organizationId])
+}
+
+model CrewMember {
+  id     String  @id @default(cuid())
+  crewId String
+  crew   Crew    @relation(fields: [crewId], references: [id], onDelete: Cascade)
+  name   String
+  phone  String?
+  userId String? @unique
+  user   User?   @relation(fields: [userId], references: [id])
+
+  // RSE/seasonal-labour payroll (docs/BLUEPRINT.md Section 22). isRse and
+  // minGuaranteedHoursPerWeek are operator-entered, not derived from any live
+  // Immigration NZ/MBIE feed — the actual RSE minimum-hours guarantee is a
+  // scheme condition tied to each employer's Agreement to Recruit, not a fixed
+  // industry-wide number, so this app can only apply whatever figure the
+  // operator has configured for that worker. lib/payroll.ts flags a rolling
+  // window against this threshold as a heads-up, not a compliance
+  // certification — operators must verify against their own ATR and current
+  // MBIE policy.
+  employmentType            String  @default("HOURLY") // HOURLY | PIECE_RATE | SALARY | MIXED
+  isRse                     Boolean @default(false)
+  hourlyRate                Float?
+  minGuaranteedHoursPerWeek Float?
+  minimumWageType           String  @default("ADULT") // ADULT | STARTING_OUT_TRAINING | RSE_RETURNING_WORKER — see MINIMUM_WAGE_REFERENCE_RATES
+
+  createdAt DateTime @default(now())
+
+  timeEntries      TimeEntry[]
+  pieceRateRecords PieceRateRecord[]
+  wageTopUps       WageTopUp[]
+
+  @@index([crewId])
+}
+
+// ---------------------------------------------------------------------------
+// Pillar 2 — Job Scheduling
+// ---------------------------------------------------------------------------
+
+model Job {
+  id              String        @id @default(cuid())
+  growerOrgId     String
+  growerOrg       Organization  @relation("GrowerJobs", fields: [growerOrgId], references: [id], onDelete: Cascade)
+  contractorOrgId String?
+  contractorOrg   Organization? @relation("ContractorJobs", fields: [contractorOrgId], references: [id])
+  orchardId       String
+  orchard         Orchard       @relation(fields: [orchardId], references: [id])
+  crewId          String?
+  crew            Crew?         @relation(fields: [crewId], references: [id])
+
+  jobType               String // e.g. HARVEST, SPRAY, TRANSPORT, GENERAL
+  status                String   @default("NEW") // NEW|SCHEDULED|CONFIRMED|IN_PROGRESS|COMPLETE|INVOICED|CANCELLED
+  priority              String   @default("NORMAL") // LOW|NORMAL|HIGH|URGENT
+  scheduledDate         DateTime
+  startTime             String? // "HH:mm", kept as string to avoid timezone-of-a-time-only-value ambiguity
+  estimatedDurationMins Int?
+  instructions          String?
+
+  rate     Float? // $ per unit
+  unit     String? // e.g. "hour", "bin", "hectare"
+  quantity Float? // captured at completion
+
+  // Logistics Bridge (docs/BLUEPRINT.md: "Driver — where am I going and what
+  // happens next?", "Pack House — what's arriving and when?"). Only meaningful
+  // for jobType=TRANSPORT — deliberately kept on Job rather than a parallel
+  // Delivery model, since a transport run already IS a job with the same
+  // status machine (NEW..COMPLETE) a delivery lifecycle needs.
+  destinationOrgId String? // receiving org, typically a PACKHOUSE
+  destinationOrg   Organization? @relation("JobDestination", fields: [destinationOrgId], references: [id])
+  assignedDriverId String? // a User with role=DRIVER
+  assignedDriver   User?         @relation("JobAssignedDriver", fields: [assignedDriverId], references: [id])
+  loadDescription  String? // e.g. "40 bins Hayward"
+  etaAt            DateTime? // live estimate the driver updates en route, distinct from the static scheduledDate/startTime
+
+  createdById String
+  createdBy   User     @relation("JobCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  statusHistory    JobStatusHistory[]
+  invoiceItems     InvoiceItem[]
+  notifications    Notification[]
+  maturityTests    HarvestMaturityTest[]
+  sprayEntries     SprayDiaryEntry[]
+  timeEntries      TimeEntry[]
+  pieceRateRecords PieceRateRecord[]
+  gradingResults   GradingResult[]
+
+  @@index([growerOrgId])
+  @@index([contractorOrgId])
+  @@index([status])
+  @@index([scheduledDate])
+}
+
+model JobStatusHistory {
+  id          String   @id @default(cuid())
+  jobId       String
+  job         Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  fromStatus  String?
+  toStatus    String
+  // Null = system/Conductor-driven transition (e.g. auto-move to INVOICED on
+  // invoice creation), not a person. Keep this distinguishable from a real actor.
+  changedById String?
+  changedBy   User?    @relation("StatusChangedBy", fields: [changedById], references: [id])
+  note        String?
+  changedAt   DateTime @default(now())
+
+  @@index([jobId])
+}
+
+// ---------------------------------------------------------------------------
+// Compliance & Quality Records — replaces paper harvest/spray/coolstore logs.
+// See docs/BLUEPRINT.md Section 21 for sourcing: thresholds captured here are
+// reference defaults from public NZKGI/Zespri material, snapshotted onto each
+// record for audit purposes because the industry adjusts them season to season —
+// they are NOT re-derived from a live Zespri feed (no such integration exists).
+// ---------------------------------------------------------------------------
+
+model HarvestMaturityTest {
+  id                   String   @id @default(cuid())
+  orchardId            String
+  orchard              Orchard  @relation(fields: [orchardId], references: [id], onDelete: Cascade)
+  jobId                String?
+  job                  Job?     @relation(fields: [jobId], references: [id])
+  variety              String // HAYWARD | GOLD3 | OTHER
+  testDate             DateTime
+  sampleSize           Int?
+  dryMatterPercent     Float?
+  brix                 Float // soluble solids concentration, °Brix
+  minDryMatterRequired Float? // threshold snapshotted at test time, see header note
+  minBrixRequired      Float?
+  passed               Boolean
+  labOrTester          String? // independent lab name, or "in-house" if self-tested
+  notes                String?
+  recordedById         String
+  recordedBy           User     @relation("MaturityTestRecordedBy", fields: [recordedById], references: [id])
+  createdAt            DateTime @default(now())
+
+  @@index([orchardId])
+  @@index([jobId])
+}
+
+model SprayDiaryEntry {
+  id                    String    @id @default(cuid())
+  orchardId             String
+  orchard               Orchard   @relation(fields: [orchardId], references: [id], onDelete: Cascade)
+  jobId                 String?
+  job                   Job?      @relation(fields: [jobId], references: [id])
+  productName           String
+  activeIngredient      String?
+  hsrNumber             String? // Hazardous Substance Reference number — required for highly ecotoxic compounds
+  rateApplied           Float
+  rateUnit              String // e.g. "L/ha", "kg/ha"
+  areaTreatedHa         Float?
+  targetPestOrDisease   String?
+  weatherConditions     String?
+  applicationDate       DateTime
+  withholdingPeriodDays Int? // pre-harvest interval
+  harvestSafeDate       DateTime? // applicationDate + withholdingPeriodDays, precomputed for quick display
+  applicatorId          String
+  applicator            User      @relation("SprayEntryApplicator", fields: [applicatorId], references: [id])
+  notes                 String?
+  createdAt             DateTime  @default(now())
+
+  @@index([orchardId])
+  @@index([jobId])
+  @@index([applicationDate])
+}
+
+// ---------------------------------------------------------------------------
+// RSE / seasonal-labour payroll compliance — wage/hours records that stand in
+// for the timesheets and piece-rate dockets a contractor would otherwise keep
+// on paper. See the note on CrewMember for what "compliance" does and doesn't
+// mean here.
+// ---------------------------------------------------------------------------
+
+model TimeEntry {
+  id           String     @id @default(cuid())
+  crewMemberId String
+  crewMember   CrewMember @relation(fields: [crewMemberId], references: [id], onDelete: Cascade)
+  jobId        String?
+  job          Job?       @relation(fields: [jobId], references: [id])
+  clockIn      DateTime
+  clockOut     DateTime?
+  breakMinutes Int        @default(0)
+  notes        String?
+  createdAt    DateTime   @default(now())
+
+  @@index([crewMemberId, clockIn])
+  @@index([jobId])
+}
+
+model PieceRateRecord {
+  id           String     @id @default(cuid())
+  crewMemberId String
+  crewMember   CrewMember @relation(fields: [crewMemberId], references: [id], onDelete: Cascade)
+  jobId        String?
+  job          Job?       @relation(fields: [jobId], references: [id])
+  recordDate   DateTime
+  unit         String // e.g. "bin", "tray", "kg"
+  quantity     Float
+  ratePerUnit  Float
+  amount       Float // quantity * ratePerUnit, snapshotted at entry time
+  notes        String?
+  createdAt    DateTime   @default(now())
+
+  @@index([crewMemberId, recordDate])
+  @@index([jobId])
+}
+
+// Minimum-wage top-up for piece-rate/mixed workers (docs/BLUEPRINT.md
+// Section 22 addendum). NZ's Minimum Wage Act requires an employer paying
+// piece rates to ensure the worker still earns at least minimum wage for
+// every hour worked — lib/payroll.ts computes a weekly check (hours worked
+// x the crew member's minimumWageType rate vs. piece-rate earnings that
+// same week) and this record is created when the operator confirms and
+// pays the resulting shortfall. minimumWageRate is snapshotted per row
+// since MINIMUM_WAGE_REFERENCE_RATES changes yearly and every past
+// calculation must stay checkable against the rate it actually used.
+model WageTopUp {
+  id                String     @id @default(cuid())
+  crewMemberId      String
+  crewMember        CrewMember @relation(fields: [crewMemberId], references: [id], onDelete: Cascade)
+  periodStart       DateTime // Monday of the ISO week this top-up covers
+  periodEnd         DateTime // Sunday
+  hoursWorked       Float
+  pieceRateEarnings Float
+  minimumWageRate   Float
+  requiredMinimum   Float // hoursWorked * minimumWageRate, snapshotted
+  shortfall         Float // amount actually paid as top-up
+  computedById      String
+  computedBy        User       @relation("WageTopUpComputedBy", fields: [computedById], references: [id])
+  createdAt         DateTime   @default(now())
+
+  @@unique([crewMemberId, periodStart])
+  @@index([crewMemberId])
+}
+
+// ---------------------------------------------------------------------------
+// Psa / biosecurity risk monitoring — orchard-level pest and disease
+// observations, distinct from SprayDiaryEntry (which records treatments
+// applied, not risk found). Modelled after the kind of monitoring form KVH
+// publishes for growers, but this is KiwiFlow's own record, not a submission
+// to KVH or any external biosecurity authority.
+// ---------------------------------------------------------------------------
+
+model BiosecurityInspection {
+  id               String    @id @default(cuid())
+  orchardId        String
+  orchard          Orchard   @relation(fields: [orchardId], references: [id], onDelete: Cascade)
+  inspectionDate   DateTime
+  category         String // PSA | BMSB | OTHER_PEST | OTHER_DISEASE | GENERAL
+  riskLevel        String // LOW | MEDIUM | HIGH
+  findings         String
+  actionTaken      String?
+  followUpRequired Boolean   @default(false)
+  followUpDate     DateTime?
+  inspectedById    String
+  inspectedBy      User      @relation("BiosecurityInspectionInspector", fields: [inspectedById], references: [id])
+  createdAt        DateTime  @default(now())
+
+  @@index([orchardId])
+  @@index([inspectionDate])
+  @@index([riskLevel])
+}
+
+// ---------------------------------------------------------------------------
+// Health & safety incident/hazard reporting — the Health and Safety at Work
+// Act 2015 requires employers to have a system for this; KiwiFlow had none
+// until now. Same shape as BiosecurityInspection deliberately: an orchard
+// visit is where both kinds of finding actually happen. This is KiwiFlow's
+// own record, not a submission to WorkSafe — see the SAFETY_SEVERITY_LEVELS
+// comment in lib/types.ts on what CRITICAL does and doesn't mean.
+// ---------------------------------------------------------------------------
+
+model SafetyIncident {
+  id               String    @id @default(cuid())
+  orchardId        String
+  orchard          Orchard   @relation(fields: [orchardId], references: [id], onDelete: Cascade)
+  incidentDate     DateTime
+  type             String // HAZARD | NEAR_MISS | INCIDENT
+  severity         String // LOW | MEDIUM | HIGH | CRITICAL
+  description      String
+  injuryInvolved   Boolean   @default(false)
+  actionTaken      String?
+  followUpRequired Boolean   @default(false)
+  followUpDate     DateTime?
+  reportedById     String
+  reportedBy       User      @relation("SafetyIncidentReporter", fields: [reportedById], references: [id])
+  createdAt        DateTime  @default(now())
+
+  @@index([orchardId])
+  @@index([incidentDate])
+  @@index([severity])
+}
+
+// ---------------------------------------------------------------------------
+// NZGAP / GLOBALG.A.P. certification tracker. KiwiFlow already generates
+// most of the underlying audit evidence a certification body checks
+// (SprayDiaryEntry, HarvestMaturityTest, CoolstoreTemperatureLog) — this is
+// the record that ties a certificate number and expiry to an orchard so a
+// grower can actually hand it to an auditor, rather than the evidence
+// existing with no certificate wrapper around it. KiwiFlow does not submit
+// anything to AsureQuality/GLOBALG.A.P. itself — an annual on-site audit by
+// a real certification body is still how the actual certificate is earned.
+// ---------------------------------------------------------------------------
+
+model Certification {
+  id                String    @id @default(cuid())
+  orchardId         String
+  orchard           Orchard   @relation(fields: [orchardId], references: [id], onDelete: Cascade)
+  scheme            String // NZGAP | GLOBALGAP | OTHER
+  certificateNumber String?
+  ggn               String? // GLOBALG.A.P. Number — NZGAP-Global growers get one of these too
+  status            String    @default("NOT_STARTED") // NOT_STARTED | IN_PROGRESS | CERTIFIED | EXPIRED | SUSPENDED
+  issuedDate        DateTime?
+  expiryDate        DateTime?
+  notes             String?
+  // Dedup guard for the expiry-warning check (lib/certificationExpiry.ts):
+  // re-warn at most weekly during the 30-day window rather than on every
+  // page load that happens to trigger the check.
+  expiryWarnedAt    DateTime?
+  createdById       String
+  createdBy         User      @relation("CertificationCreatedBy", fields: [createdById], references: [id])
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([orchardId])
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// Packhouse grading results — manually entered per delivered load. No sorter
+// (TOMRA or otherwise) integration exists; sourceSystem exists so a future
+// real import can be told apart from what a person typed in.
+// ---------------------------------------------------------------------------
+
+model GradingResult {
+  id                   String       @id @default(cuid())
+  jobId                String
+  job                  Job          @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  organizationId       String // packhouse org recording the result
+  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  gradingDate          DateTime
+  totalTrayEquivalents Float
+  class1Percent        Float?
+  class2Percent        Float?
+  rejectPercent        Float?
+  averageBrix          Float?
+  sizeCurve            String? // JSON-encoded { size: percent } distribution, optional
+  sourceSystem         String       @default("MANUAL") // MANUAL | IMPORTED (no importer exists yet)
+  notes                String?
+  recordedById         String
+  recordedBy           User         @relation("GradingResultRecordedBy", fields: [recordedById], references: [id])
+  createdAt            DateTime     @default(now())
+
+  // A pack house consolidates graded loads — often from several
+  // orchards/growers — into one export shipment; nullable because a load
+  // isn't attached to a shipment until the pack house builds one.
+  exportShipmentId String?
+  exportShipment   ExportShipment? @relation(fields: [exportShipmentId], references: [id])
+
+  @@index([jobId])
+  @@index([organizationId])
+  @@index([gradingDate])
+  @@index([exportShipmentId])
+}
+
+// The export leg: pack house -> a TRANSPORT org's own wharf coolstore
+// (trucked) -> loaded for export, either as palletised cargo on a
+// specialised reefer vessel or packed into containers on a container
+// ship (both real, current NZ modes — see lib/types.ts's
+// EXPORT_SHIPMENT_MODES header comment for the TKL Logistics/Port of
+// Tauranga sourcing). transportOrgId is a TRANSPORT-type org, not a
+// separate "port" org type — that's who actually runs the wharf coolstore
+// and consolidates cargo in practice. KiwiFlow records what happened; it
+// doesn't book cargo, talk to a terminal operating system, the shipping
+// line's booking system, or issue MPI phytosanitary certificates.
+model ExportShipment {
+  id             String        @id @default(cuid())
+  packhouseOrgId String
+  packhouseOrg   Organization  @relation("ExportShipmentPackhouse", fields: [packhouseOrgId], references: [id], onDelete: Cascade)
+  // Nullable until the pack house has decided which transport/wharf
+  // operator is handling this shipment — a shipment can be PREPARING
+  // before that's set.
+  transportOrgId String?
+  transportOrg   Organization? @relation("ExportShipmentTransport", fields: [transportOrgId], references: [id])
+
+  status String @default("PREPARING") // PREPARING | IN_TRANSIT_TO_WHARF | AT_WHARF_COOLSTORE | LOADED_ON_VESSEL | DEPARTED
+  mode   String @default("REEFER_VESSEL_PALLETS") // REEFER_VESSEL_PALLETS | CONTAINER
+
+  palletCount                    Int?
+  containerNumber                String? // ISO 6346 once assigned, e.g. "MSCU1234567" — CONTAINER mode only
+  carrierBookingReference        String?
+  shippingLine                   String? // e.g. the reefer-vessel operator or container line
+  vesselName                     String?
+  voyageNumber                   String?
+  destinationPort                String? // overseas port, e.g. "Shanghai, China" — free text, not a lookup table
+  reeferSetpointC                Float?    @default(0) // see REEFER_SETPOINT_REFERENCE_C
+  etd                            DateTime? // estimated/actual time of departure
+  phytosanitaryCertificateNumber String? // MPI-issued reference, not generated by KiwiFlow
+
+  notes String?
+
+  createdById String
+  createdBy   User     @relation("ExportShipmentCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  gradingResults GradingResult[]
+  statusHistory  ExportShipmentStatusHistory[]
+
+  @@index([packhouseOrgId])
+  @@index([transportOrgId])
+  @@index([status])
+}
+
+model ExportShipmentStatusHistory {
+  id               String         @id @default(cuid())
+  exportShipmentId String
+  exportShipment   ExportShipment @relation(fields: [exportShipmentId], references: [id], onDelete: Cascade)
+  fromStatus       String?
+  toStatus         String
+  changedById      String?
+  changedBy        User?          @relation("ExportStatusChangedBy", fields: [changedById], references: [id])
+  note             String?
+  changedAt        DateTime       @default(now())
+
+  @@index([exportShipmentId])
+}
+
+model CoolstoreTemperatureLog {
+  id              String       @id @default(cuid())
+  organizationId  String // PACKHOUSE or GROWER org running the coolstore
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  facilityName    String // e.g. "Coolstore 2" or a room/bay label
+  loggedAt        DateTime     @default(now())
+  temperatureC    Float
+  humidityPercent Float?
+  minRangeC       Float? // range snapshotted at log time, see header note
+  maxRangeC       Float?
+  withinRange     Boolean
+  recordedById    String
+  recordedBy      User         @relation("CoolstoreLogRecordedBy", fields: [recordedById], references: [id])
+  notes           String?
+
+  @@index([organizationId])
+  @@index([loggedAt])
+}
+
+// ---------------------------------------------------------------------------
+// Pillar 3 — Invoicing
+// ---------------------------------------------------------------------------
+
+model Invoice {
+  id            String       @id @default(cuid())
+  invoiceNumber String       @unique
+  fromOrgId     String // who is billing
+  fromOrg       Organization @relation("InvoiceFrom", fields: [fromOrgId], references: [id])
+  toOrgId       String // who is being billed
+  toOrg         Organization @relation("InvoiceTo", fields: [toOrgId], references: [id])
+  status        String       @default("DRAFT") // DRAFT|SENT|PAID|OVERDUE|VOID
+  gstRate       Float        @default(0.15)
+  subtotal      Float        @default(0)
+  gstAmount     Float        @default(0)
+  total         Float        @default(0)
+  dueDate       DateTime?
+  issuedAt      DateTime?
+  paidAt        DateTime?
+  // Set once lib/xero.ts successfully pushes this invoice — the Xero-side
+  // Invoice ID, so a re-push can be recognised as "already synced" instead
+  // of creating a duplicate in Xero.
+  xeroInvoiceId String?
+  xeroSyncedAt  DateTime?
+  // Same purpose as xeroInvoiceId/xeroSyncedAt, for MYOB's Sale/Invoice UID.
+  myobInvoiceUid String?
+  myobSyncedAt   DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  items InvoiceItem[]
+
+  @@index([fromOrgId])
+  @@index([toOrgId])
+  @@index([status])
+}
+
+model InvoiceItem {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  jobId       String?
+  job         Job?    @relation(fields: [jobId], references: [id])
+  description String
+  quantity    Float   @default(1)
+  rate        Float
+  amount      Float
+
+  @@index([invoiceId])
+}
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+model Notification {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String?
+  user           User?        @relation(fields: [userId], references: [id])
+  jobId          String?
+  job            Job?         @relation(fields: [jobId], references: [id])
+  urgency        String       @default("NORMAL") // NORMAL|URGENT|CRITICAL
+  title          String
+  body           String
+  read           Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId])
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Conductor — Event bus & rule engine
+// ---------------------------------------------------------------------------
+
+model Event {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  type           String // e.g. JOB_COMPLETED
+  payload        String // JSON-encoded
+  createdAt      DateTime     @default(now())
+  processedAt    DateTime?
+
+  @@index([organizationId])
+  @@index([type])
+}
+
+model WorkflowRule {
+  id             String        @id @default(cuid())
+  organizationId String? // null = global rule
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  eventType      String
+  enabled        Boolean       @default(true)
+  actions        String // JSON-encoded array of { action, params }
+  createdAt      DateTime      @default(now())
+
+  @@index([eventType])
+  @@index([organizationId])
+}
+
+// ---------------------------------------------------------------------------
+// OneTap Entry
+// ---------------------------------------------------------------------------
+
+model OnboardingInvite {
+  id             String       @id @default(cuid())
+  organizationId String // inviting grower org
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  token          String       @unique
+  contractorName String?
+  status         String       @default("PENDING") // PENDING|USED|EXPIRED
+  expiresAt      DateTime
+  createdAt      DateTime     @default(now())
+  usedAt         DateTime?
+
+  @@index([organizationId])
+}
+
+// ---------------------------------------------------------------------------
+// Documents & Audit
+// ---------------------------------------------------------------------------
+
+model Document {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  ownerType      String // JOB | CREW_MEMBER | ORGANIZATION
+  ownerId        String
+  fileName       String
+  storagePath    String
+  uploadedAt     DateTime     @default(now())
+
+  @@index([organizationId])
+  @@index([ownerType, ownerId])
+}
+
+model AuditLog {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actorId        String?
+  actor          User?        @relation(fields: [actorId], references: [id])
+  action         String
+  entityType     String
+  entityId       String
+  detail         String? // JSON-encoded
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId])
+  @@index([entityType, entityId])
+}
+
+// ---------------------------------------------------------------------------
+// Pillar 4 — Materials Ordering
+//
+// Suppliers are external businesses (fertiliser, chemical, packaging etc.), not
+// KiwiFlow organizations — an org manages its own supplier list, there's no
+// cross-tenant relation here the way ContractorLink connects two orgs. Money never
+// flows through the Invoice model for this: a MaterialOrder is what an org owes an
+// external supplier, not a bill between two KiwiFlow tenants.
+// ---------------------------------------------------------------------------
+
+model Supplier {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  category       String // FERTILISER|CHEMICAL|PACKAGING|FUEL|EQUIPMENT|OTHER
+  contactName    String?
+  phone          String?
+  email          String?
+  notes          String?
+  createdAt      DateTime     @default(now())
+
+  orders MaterialOrder[]
+
+  @@index([organizationId])
+}
+
+model MaterialOrder {
+  id             String       @id @default(cuid())
+  organizationId String // the org placing the order (grower, contractor, or packhouse)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  supplierId     String
+  supplier       Supplier     @relation(fields: [supplierId], references: [id])
+  orchardId      String? // which orchard this order is for, if applicable
+  orchard        Orchard?     @relation(fields: [orchardId], references: [id])
+
+  status                String    @default("DRAFT") // DRAFT|SUBMITTED|CONFIRMED|DELIVERED|CANCELLED
+  requestedDeliveryDate DateTime?
+  deliveredAt           DateTime?
+  notes                 String?
+  // Denormalized like Invoice.subtotal — recomputed from items on every mutation,
+  // not trusted as an independent source of truth.
+  subtotal              Float     @default(0)
+
+  createdById String
+  createdBy   User     @relation("MaterialOrderCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items MaterialOrderItem[]
+
+  @@index([organizationId])
+  @@index([supplierId])
+  @@index([status])
+}
+
+model MaterialOrderItem {
+  id              String        @id @default(cuid())
+  materialOrderId String
+  materialOrder   MaterialOrder @relation(fields: [materialOrderId], references: [id], onDelete: Cascade)
+  description     String
+  quantity        Float
+  unit            String // e.g. "L", "kg", "bag", "unit"
+  unitPrice       Float
+  amount          Float // quantity * unitPrice, snapshotted at line-add time
+
+  @@index([materialOrderId])
+}
+
+// ---------------------------------------------------------------------------
+// Mass Broadcasting — a grower sending one message to some/all of their
+// linked contractors ("spray window closing in 2 hours, all crews please
+// note"). v1 is deliberately one-directional (GROWER -> its ACTIVE
+// ContractorLink orgs): that's the actual "mass" use case in this industry —
+// a contractor broadcasting to growers isn't, since each contractor only has
+// one grower per job relationship they'd already message directly.
+// ---------------------------------------------------------------------------
+
+model Broadcast {
+  id             String       @id @default(cuid())
+  organizationId String // sender org
+  organization   Organization @relation("BroadcastSender", fields: [organizationId], references: [id], onDelete: Cascade)
+  createdById    String
+  createdBy      User         @relation("BroadcastCreatedBy", fields: [createdById], references: [id])
+  title          String
+  body           String
+  urgency        String       @default("NORMAL") // NORMAL|URGENT|CRITICAL — same channel fan-out as Notification
+  createdAt      DateTime     @default(now())
+
+  recipients BroadcastRecipient[]
+
+  @@index([organizationId])
+}
+
+// One row per recipient org — lets the compose UI show real delivery/read
+// counts per broadcast instead of a single opaque "sent" state.
+model BroadcastRecipient {
+  id             String       @id @default(cuid())
+  broadcastId    String
+  broadcast      Broadcast    @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization @relation("BroadcastRecipientOrg", fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  @@unique([broadcastId, organizationId])
+  @@index([organizationId])
+}
+
+// ---------------------------------------------------------------------------
+// AI Daily Briefing
+// ---------------------------------------------------------------------------
+
+// A read-only AI-generated summary of one org's day: today's/overdue jobs,
+// unread notifications, overdue invoices — the same facts a GROWER or
+// CONTRACTOR would already see on their dashboard, restated as prose with
+// suggested priorities. Never writes to Job/Invoice/Notification itself; it
+// only reads them. Deliberately not named "Conductor" even though it's the
+// same "look across jobs + orgs and act" territory — that name is already
+// the event-bus/rule-engine in lib/conductor/ (docs/BLUEPRINT.md Section 1),
+// which actually mutates state on real events. This is a separate, additive,
+// read-only feature and reusing the name would suggest they're the same
+// system when they aren't.
+model DailyBriefing {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Date-only (stored at UTC midnight) so a unique constraint can enforce
+  // "at most one briefing per org per day" — regenerating replaces it rather
+  // than accumulating duplicates from repeated clicks.
+  briefingDate DateTime
+  content      String // the model's prose response, rendered as-is (escaped, not HTML)
+  modelId      String // e.g. "claude-sonnet-5" — which model produced this, for auditability
+  createdAt    DateTime @default(now())
+
+  @@unique([organizationId, briefingDate])
+  @@index([organizationId])
+}

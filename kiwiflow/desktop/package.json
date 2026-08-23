@@ -1,0 +1,47 @@
+{
+  "name": "kiwiflow-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "KiwiFlow packaged as a Windows desktop app: the real Next.js app + its own local SQLite database, running fully offline.",
+  "main": "main.js",
+  "scripts": {
+    "build:resources": "node build.js",
+    "rebuild-native": "node rebuild-native.js",
+    "dist": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^43.4.1",
+    "electron-builder": "^26.15.3",
+    "@electron/rebuild": "^4.2.0"
+  },
+  "build": {
+    "appId": "nz.kiwiflow.desktop",
+    "productName": "KiwiFlow",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": "."
+      }
+    ],
+    "asarUnpack": [
+      "**/*.node"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}

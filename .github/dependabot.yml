@@ -1,0 +1,18 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/kiwiflow"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      # Security patches land as individual, reviewable PRs; routine version
+      # bumps for everything else get batched so they don't drown those out.
+      routine-updates:
+        applies-to: version-updates
+        patterns:
+          - "*"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

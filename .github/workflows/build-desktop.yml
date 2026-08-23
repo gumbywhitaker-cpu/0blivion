@@ -1,0 +1,70 @@
+name: Build Windows desktop app
+
+# Manual only: this is a slow (Electron download + native module compile),
+# infrequently-needed build, not something that should run on every push and
+# compete with the fast CI feedback loop in ci.yml. Trigger from the Actions
+# tab (or the API) when a real Windows .exe is actually needed.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    # Must run on real Windows: better-sqlite3's native binary has to be
+    # compiled on the same OS/arch it will run on, and Windows-native
+    # compilation isn't reliably cross-buildable from Linux/macOS.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: kiwiflow/package-lock.json
+
+      - name: Install app dependencies
+        working-directory: kiwiflow
+        run: npm ci
+
+      - name: Build the Next.js app (standalone output)
+        working-directory: kiwiflow
+        env:
+          DATABASE_URL: "file:./ci-build-only.db"
+          AUTH_SECRET: "ci-build-only-not-a-real-secret"
+          NEXT_PUBLIC_APP_URL: "http://127.0.0.1:0"
+          # next.config.ts reads this at build time (Next bakes computed
+          # headers into the standalone build's manifest, not re-evaluated
+          # at server start) to drop the HTTPS-upgrade headers that don't
+          # make sense for a loopback-only Electron window -- see the
+          # isDesktop comment there.
+          KIWIFLOW_DESKTOP: "1"
+        run: |
+          npx prisma generate
+          npm run build
+
+      - name: Install desktop packaging dependencies
+        working-directory: kiwiflow/desktop
+        run: npm ci
+
+      - name: Assemble app resources
+        working-directory: kiwiflow/desktop
+        run: node build.js
+
+      - name: Rebuild native modules for Electron
+        working-directory: kiwiflow/desktop
+        run: node rebuild-native.js
+
+      - name: Build the Windows installer
+        working-directory: kiwiflow/desktop
+        env:
+          # No code-signing certificate exists for this project (see
+          # docs/DESKTOP_APP.md) -- tell electron-builder not to go looking
+          # for one on the runner, rather than fail or silently skip signing.
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npx electron-builder --win
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kiwiflow-windows-installer
+          path: kiwiflow/desktop/dist/*.exe
+          retention-days: 30
