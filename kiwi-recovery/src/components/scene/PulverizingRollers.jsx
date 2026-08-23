@@ -44,7 +44,9 @@ export default function PulverizingRollers() {
         <meshStandardMaterial color={BODY} roughness={0.5} metalness={0.5} />
       </mesh>
 
-      {/* maintenance access + safety shield */}
+      {/* maintenance access + safety shield -- kept translucent enough that
+          the rollers behind it stay legible rather than reading as a flat
+          orange panel */}
       <mesh position={[0, -0.05, 0.51]}>
         <boxGeometry args={[0.75, 0.7, 0.02]} />
         <meshStandardMaterial
@@ -52,7 +54,8 @@ export default function PulverizingRollers() {
           roughness={0.4}
           metalness={0.3}
           transparent
-          opacity={0.22}
+          opacity={0.1}
+          depthWrite={false}
         />
       </mesh>
 

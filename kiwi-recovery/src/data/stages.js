@@ -53,7 +53,7 @@ const RAW_STAGES = [
     tagline: 'Size reduction',
     position: [0, 1.15, 0],
     explodeOffset: [0.1, 1.45, -1.0],
-    cameraBias: [0.2, 0.45, 3.8],
+    cameraBias: [1.7, 0.6, 3.0],
     accent: '#ff5a1f',
     description:
       'Dried string is drawn between counter-rotating pulverizing rollers, breaking long fibrous lengths into a manageable, uniform crumb ready for grading.',

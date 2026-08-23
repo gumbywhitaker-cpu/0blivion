@@ -513,11 +513,15 @@ a {
   }
 
   .callout {
-    left: 50%;
+    /* centered via left/right + margin, not transform: translate(-50%, 0) --
+       CalloutPanel's GSAP slide-in animates transform on this element
+       directly (inline style), which would silently override a
+       transform-based centering trick and push the card off-screen. */
+    left: 4vw;
+    right: 4vw;
     top: auto;
     bottom: 18px;
-    transform: translate(-50%, 0);
-    width: 92vw;
+    width: auto;
     padding: 20px 20px 18px;
   }
 
@@ -526,8 +530,10 @@ a {
     left: 16px;
   }
 
+  /* the brandmark already persists in the top-left throughout the scroll;
+     on narrow screens there isn't room for this too without the two
+     colliding, so drop the redundant one rather than truncating either. */
   .sticky-label {
-    top: 16px;
-    right: 16px;
+    display: none;
   }
 }

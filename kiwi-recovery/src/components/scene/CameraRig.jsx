@@ -8,7 +8,10 @@ import { scrollState } from '../../state/scrollState'
 // hero framing and each of the five stages in process order, so the viewer
 // is always moved deliberately along the machine rather than "teleported."
 export default function CameraRig() {
-  const { camera } = useThree()
+  const { camera, size } = useThree()
+  const lookTarget = useMemo(() => new THREE.Vector3(), [])
+  const rawPos = useMemo(() => new THREE.Vector3(), [])
+  const dir = useMemo(() => new THREE.Vector3(), [])
 
   const { posPath, lookPath } = useMemo(() => {
     const posPoints = [new THREE.Vector3(...HERO_CAMERA.position)]
@@ -38,8 +41,20 @@ export default function CameraRig() {
     const driftX = Math.sin(t * 0.18) * 0.35 * idleAmount
     const driftY = Math.sin(t * 0.13) * 0.12 * idleAmount
 
-    camera.position.set(pos.x + driftX, pos.y + driftY, pos.z)
-    camera.lookAt(look.x + driftX * 0.4, look.y, look.z)
+    lookTarget.set(look.x + driftX * 0.4, look.y, look.z)
+    rawPos.set(pos.x + driftX, pos.y + driftY, pos.z)
+
+    // On narrow/portrait viewports a fixed vertical FOV covers much less
+    // horizontal width, cropping the machine's sides (most noticeable on
+    // phones). Push the camera back along its existing view direction to
+    // compensate, rather than changing FOV -- keeps the framing/composition
+    // identical, just further away.
+    const aspect = size.width / size.height
+    const distanceScale = aspect < 1 ? THREE.MathUtils.clamp(1 / aspect, 1, 1.9) : 1
+
+    dir.subVectors(rawPos, lookTarget)
+    camera.position.copy(lookTarget).addScaledVector(dir, distanceScale)
+    camera.lookAt(lookTarget)
   })
 
   return null
