@@ -1,39 +1,28 @@
 import { prisma } from "../lib/db";
 import { hashPassword } from "../lib/auth/password";
+import globalWorkflowRules from "./globalWorkflowRules.json";
 
 /**
- * Always run, in every environment: the global Conductor rule that makes
- * "job complete -> invoice drafted -> grower notified" actually happen
- * (docs/BLUEPRINT.md Section 6). Without this row the Conductor has nothing to do.
+ * Always run, in every environment: the global Conductor rules that make
+ * "job complete -> invoice drafted -> grower notified" and friends actually
+ * happen (docs/BLUEPRINT.md Section 6). Without these rows the Conductor has
+ * nothing to do. The rule list itself lives in globalWorkflowRules.json, not
+ * hardcoded here, so desktop/bootstrap.js (the Electron app's first-run DB
+ * init, which can't use this Prisma-backed script) seeds the exact same data
+ * from the exact same source instead of a hand-copied, driftable duplicate.
  */
-async function upsertGlobalRule(name: string, eventType: string, actions: { action: string }[]) {
-  const existing = await prisma.workflowRule.findFirst({
-    where: { organizationId: null, eventType, name },
-  });
-  if (existing) return;
-
-  await prisma.workflowRule.create({
-    data: { organizationId: null, name, eventType, enabled: true, actions: JSON.stringify(actions) },
-  });
-  console.log(`Seeded global WorkflowRule: ${eventType} -> ${actions.map((a) => a.action).join(", ")}`);
-}
-
 async function seedWorkflowRules() {
-  await upsertGlobalRule("Auto-invoice on job completion", "JOB_COMPLETED", [
-    { action: "createInvoiceDraft" },
-  ]);
-  await upsertGlobalRule("Alert on coolstore temperature excursion", "COOLSTORE_TEMP_ALERT", [
-    { action: "notifyCoolstoreAlert" },
-  ]);
-  await upsertGlobalRule("Notify on material order submitted", "MATERIAL_ORDER_SUBMITTED", [
-    { action: "notifyMaterialOrderUpdate" },
-  ]);
-  await upsertGlobalRule("Notify on material order confirmed", "MATERIAL_ORDER_CONFIRMED", [
-    { action: "notifyMaterialOrderUpdate" },
-  ]);
-  await upsertGlobalRule("Notify on material order delivered", "MATERIAL_ORDER_DELIVERED", [
-    { action: "notifyMaterialOrderUpdate" },
-  ]);
+  for (const rule of globalWorkflowRules) {
+    const existing = await prisma.workflowRule.findFirst({
+      where: { organizationId: null, eventType: rule.eventType, name: rule.name },
+    });
+    if (existing) continue;
+
+    await prisma.workflowRule.create({
+      data: { organizationId: null, name: rule.name, eventType: rule.eventType, enabled: true, actions: JSON.stringify(rule.actions) },
+    });
+    console.log(`Seeded global WorkflowRule: ${rule.eventType} -> ${rule.actions.map((a) => a.action).join(", ")}`);
+  }
 }
 
 /** Demo dataset for local evaluation only — skipped if any organization already exists. */

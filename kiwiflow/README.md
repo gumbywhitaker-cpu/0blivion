@@ -24,6 +24,13 @@ pages) via the web-app-install standard every OS above supports — it is
 *not* a native `.exe`/`.apk`/App Store app, and `docs/INSTALL_APP.md`
 explains why that's a materially different (and much larger) project.
 
+**Want an actual Windows `.exe` instead?** One exists: `docs/DESKTOP_APP.md`
+— a real installer with its own fully offline local database, built by a
+genuine Windows CI machine (not something claimed to work without being
+built). Read that page first — it's upfront about what is and isn't
+verified, and about the real limitations (unsigned binary, no data sync
+with the hosted site).
+
 ## Stack
 
 Next.js 16 (App Router, Server Actions) · TypeScript · Tailwind CSS 4 · Prisma 7 ·

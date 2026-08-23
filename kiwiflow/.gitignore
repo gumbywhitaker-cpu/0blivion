@@ -50,3 +50,10 @@ yarn-error.log*
 next-env.d.ts
 
 /app/generated/prisma
+
+# desktop app build output (assembled/compiled by CI, not committed)
+/desktop/node_modules
+/desktop/resources
+/desktop/dist
+/desktop/build/*.db*
+

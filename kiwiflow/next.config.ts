@@ -1,6 +1,16 @@
 import type { NextConfig } from "next";
 
 const isDev = process.env.NODE_ENV === "development";
+// Set by desktop/main.js on the child server process it forks — this build
+// only ever gets loaded by that one app window over plain http://127.0.0.1,
+// never over the open internet, so the HTTPS-upgrade headers below don't
+// apply and are actively risky here: 'upgrade-insecure-requests' or HSTS
+// telling Chromium to upgrade same-origin requests to https on a server
+// that only speaks http would break every asset/API call after the initial
+// page load. Untestable from this sandbox (no Windows/Electron runtime), so
+// this drops the uncertainty instead of assuming a loopback origin is
+// exempt from it.
+const isDesktop = process.env.KIWIFLOW_DESKTOP === "1";
 
 // Nonce-based CSP (script-src 'nonce-...' 'strict-dynamic', no 'unsafe-inline')
 // was tried and reverted: Next 16's Turbopack build doesn't tag its own
@@ -24,7 +34,7 @@ const cspHeader = `
   base-uri 'self';
   form-action 'self';
   frame-ancestors 'none';
-  upgrade-insecure-requests;
+  ${isDesktop ? "" : "upgrade-insecure-requests;"}
 `
   .replace(/\s{2,}/g, " ")
   .trim();
@@ -33,7 +43,10 @@ const SECURITY_HEADERS = [
   { key: "Content-Security-Policy", value: cspHeader },
   // Force HTTPS for a year, including subdomains, and allow browser preload
   // lists. Harmless to send over plain HTTP too — browsers ignore it there.
-  { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
+  // Skipped for the desktop app (see isDesktop above).
+  ...(isDesktop
+    ? []
+    : [{ key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" }]),
   // Belt-and-braces alongside CSP's frame-ancestors 'none' for browsers that
   // only understand the older header.
   { key: "X-Frame-Options", value: "DENY" },
@@ -45,6 +58,10 @@ const SECURITY_HEADERS = [
 ];
 
 const nextConfig: NextConfig = {
+  // Traced, self-contained build (.next/standalone) — what desktop/ packages
+  // into the Windows Electron app so it ships without a full node_modules.
+  // No effect on `next dev`/normal `next start` usage.
+  output: "standalone",
   async headers() {
     return [{ source: "/(.*)", headers: SECURITY_HEADERS }];
   },
