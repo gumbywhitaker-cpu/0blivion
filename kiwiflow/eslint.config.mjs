@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // desktop/ is a separate plain-CommonJS Node/Electron codebase (not
+    // part of the Next.js app), intentionally using require() the way
+    // Electron's main process conventionally does — not this project's
+    // TypeScript/ESM rules to lint.
+    "desktop/**",
   ]),
 ]);
 
