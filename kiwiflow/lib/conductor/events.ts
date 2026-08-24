@@ -18,6 +18,10 @@ export type ConductorEvent =
   | { type: "COOLSTORE_TEMP_ALERT"; payload: { logId: string; organizationId: string; facilityName: string; temperatureC: number } }
   | { type: "MATERIAL_ORDER_SUBMITTED"; payload: { materialOrderId: string } }
   | { type: "MATERIAL_ORDER_CONFIRMED"; payload: { materialOrderId: string } }
-  | { type: "MATERIAL_ORDER_DELIVERED"; payload: { materialOrderId: string } };
+  | { type: "MATERIAL_ORDER_DELIVERED"; payload: { materialOrderId: string } }
+  | {
+      type: "MODULAR_PIPE_DOCUMENT_NEEDS_REVIEW";
+      payload: { documentId: string; sourceType: string; errorCount: number };
+    };
 
 export type ConductorEventType = ConductorEvent["type"];

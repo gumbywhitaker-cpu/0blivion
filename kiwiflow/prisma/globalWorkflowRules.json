@@ -3,5 +3,6 @@
   { "name": "Alert on coolstore temperature excursion", "eventType": "COOLSTORE_TEMP_ALERT", "actions": [{ "action": "notifyCoolstoreAlert" }] },
   { "name": "Notify on material order submitted", "eventType": "MATERIAL_ORDER_SUBMITTED", "actions": [{ "action": "notifyMaterialOrderUpdate" }] },
   { "name": "Notify on material order confirmed", "eventType": "MATERIAL_ORDER_CONFIRMED", "actions": [{ "action": "notifyMaterialOrderUpdate" }] },
-  { "name": "Notify on material order delivered", "eventType": "MATERIAL_ORDER_DELIVERED", "actions": [{ "action": "notifyMaterialOrderUpdate" }] }
+  { "name": "Notify on material order delivered", "eventType": "MATERIAL_ORDER_DELIVERED", "actions": [{ "action": "notifyMaterialOrderUpdate" }] },
+  { "name": "Notify on Data Bridge document needing review", "eventType": "MODULAR_PIPE_DOCUMENT_NEEDS_REVIEW", "actions": [{ "action": "notifyModularPipeNeedsReview" }] }
 ]

@@ -63,6 +63,9 @@ model Organization {
   users                      User[]
   orchards                   Orchard[]
   crews                      Crew[]
+  modularPipeConfig          ModularPipeConfig?
+  modularPipeDocuments       ModularPipeDocument[]
+  modularPipeIssues          ModularPipeIssue[]
   jobsAsGrower               Job[]                     @relation("GrowerJobs")
   jobsAsContractor           Job[]                     @relation("ContractorJobs")
   jobsAsDestination          Job[]                     @relation("JobDestination")
@@ -126,6 +129,8 @@ model User {
   certificationsCreated          Certification[]               @relation("CertificationCreatedBy")
   exportShipmentsCreated         ExportShipment[]              @relation("ExportShipmentCreatedBy")
   exportStatusChanges            ExportShipmentStatusHistory[] @relation("ExportStatusChangedBy")
+  modularPipeDocumentsIngested   ModularPipeDocument[]         @relation("ModularPipeDocumentOperator")
+  modularPipeIssuesResolved      ModularPipeIssue[]            @relation("ModularPipeIssueResolvedBy")
 
   @@index([organizationId])
 }
@@ -666,30 +671,30 @@ model CoolstoreTemperatureLog {
 // ---------------------------------------------------------------------------
 
 model Invoice {
-  id            String       @id @default(cuid())
-  invoiceNumber String       @unique
-  fromOrgId     String // who is billing
-  fromOrg       Organization @relation("InvoiceFrom", fields: [fromOrgId], references: [id])
-  toOrgId       String // who is being billed
-  toOrg         Organization @relation("InvoiceTo", fields: [toOrgId], references: [id])
-  status        String       @default("DRAFT") // DRAFT|SENT|PAID|OVERDUE|VOID
-  gstRate       Float        @default(0.15)
-  subtotal      Float        @default(0)
-  gstAmount     Float        @default(0)
-  total         Float        @default(0)
-  dueDate       DateTime?
-  issuedAt      DateTime?
-  paidAt        DateTime?
+  id             String       @id @default(cuid())
+  invoiceNumber  String       @unique
+  fromOrgId      String // who is billing
+  fromOrg        Organization @relation("InvoiceFrom", fields: [fromOrgId], references: [id])
+  toOrgId        String // who is being billed
+  toOrg          Organization @relation("InvoiceTo", fields: [toOrgId], references: [id])
+  status         String       @default("DRAFT") // DRAFT|SENT|PAID|OVERDUE|VOID
+  gstRate        Float        @default(0.15)
+  subtotal       Float        @default(0)
+  gstAmount      Float        @default(0)
+  total          Float        @default(0)
+  dueDate        DateTime?
+  issuedAt       DateTime?
+  paidAt         DateTime?
   // Set once lib/xero.ts successfully pushes this invoice — the Xero-side
   // Invoice ID, so a re-push can be recognised as "already synced" instead
   // of creating a duplicate in Xero.
-  xeroInvoiceId String?
-  xeroSyncedAt  DateTime?
+  xeroInvoiceId  String?
+  xeroSyncedAt   DateTime?
   // Same purpose as xeroInvoiceId/xeroSyncedAt, for MYOB's Sale/Invoice UID.
   myobInvoiceUid String?
   myobSyncedAt   DateTime?
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   items InvoiceItem[]
 
@@ -946,11 +951,206 @@ model DailyBriefing {
   // Date-only (stored at UTC midnight) so a unique constraint can enforce
   // "at most one briefing per org per day" — regenerating replaces it rather
   // than accumulating duplicates from repeated clicks.
-  briefingDate DateTime
-  content      String // the model's prose response, rendered as-is (escaped, not HTML)
-  modelId      String // e.g. "claude-sonnet-5" — which model produced this, for auditability
-  createdAt    DateTime @default(now())
+  briefingDate   DateTime
+  content        String // the model's prose response, rendered as-is (escaped, not HTML)
+  modelId        String // e.g. "claude-sonnet-5" — which model produced this, for auditability
+  createdAt      DateTime     @default(now())
 
   @@unique([organizationId, briefingDate])
   @@index([organizationId])
+}
+
+// ---------------------------------------------------------------------------
+// Modular AI Data Bridge — Packing House Pack
+// ---------------------------------------------------------------------------
+//
+// "Hardened Modular Pipe": turns messy packhouse paperwork (quality logs, bin
+// origin records, RSE timesheets) into validated records, following the
+// three-stage Ingestion -> Refinement -> Delivery pipeline in
+// lib/modularPipe/. One pack (packing_house_pack_v1.0.0) ships; the "modular"
+// part is that ModularPipeConfig.activePack and enabledDocTypes are meant to
+// let a future pack (trucking, port logistics) plug into the same tables and
+// pipeline shape without a schema change — no second pack's schema is
+// actually implemented here, so activePack only ever holds "packing_house"
+// today (lib/modularPipe/types.ts documents this honestly).
+//
+// Org-scoped like everything else in this app (docs/BLUEPRINT.md Section 3):
+// each PACKHOUSE org runs and configures its own instance of the pipe, there
+// is no cross-org document pooling.
+
+// One row per organization, created lazily with defaults on first read
+// (lib/modularPipe/config.ts) — this is the "God Mode" admin panel's
+// slider/dropdown-backed settings object (spec Section 4.2), never free text.
+model ModularPipeConfig {
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  activePack                    String  @default("packing_house") // only pack implemented today
+  enabledDocTypes               String  @default("[\"quality_log\",\"bin_origin\",\"rse_timesheet\"]") // JSON array
+  maxShiftHours                 Float   @default(16) // shifts longer than this are flagged as suspect
+  ocrConfidenceThreshold        Float   @default(0.6) // below this, low-confidence fields are warned on
+  hoursRoundingToleranceMinutes Int     @default(6) // allowed drift between reported vs. computed timesheet total
+  strictCrossDocChecks          Boolean @default(true) // missing_bin_origin/unknown_block as errors, not warnings, when true
+
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+}
+
+// The raw_document object from Ingestion (spec Section 1), carried through
+// Refinement and Delivery as the audit-trail anchor every extracted record
+// and issue points back to.
+model ModularPipeDocument {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  channel          String // upload | text_blob | manual_entry (api/email are documented, not wired — see lib/modularPipe/types.ts)
+  operatorId       String?
+  operator         User?   @relation("ModularPipeDocumentOperator", fields: [operatorId], references: [id])
+  originalFilename String?
+  mimeType         String?
+
+  // The text actually parsed: pasted/typed text verbatim, or the model's own
+  // transcription for an image/PDF. Images themselves are never persisted —
+  // same policy as the AI grading estimate (lib/aiGrading.ts): sent to the
+  // classification call and discarded, not stored in KiwiFlow.
+  rawText   String?
+  imageNote String? // set instead of storing bytes when the input was an image, e.g. "1 photo, not retained"
+
+  sourceTypeProvisional String // quality_log | bin_origin | rse_timesheet | mixed | unknown (Ingestion's guess)
+  sourceTypeFinal       String? // set once Refinement classifies it definitively
+  status                String  @default("unclassified") // valid | valid_with_warnings | invalid | unclassified
+  classificationReason  String? // required explanation when sourceTypeFinal is "unknown" or "mixed"
+
+  packVersion           String  @default("packing_house_pack_v1.0.0")
+  schemaVersion         String  @default("1.0.0")
+  claudeModelVersion    String?
+  pipelineConfigVersion String  @default("1")
+  testMode              Boolean @default(false)
+
+  timestampReceived DateTime  @default(now())
+  classifiedAt      DateTime?
+
+  qualityLogs   ModularPipeQualityLog[]
+  binOrigins    ModularPipeBinOrigin[]
+  rseTimesheets ModularPipeRseTimesheet[]
+  issues        ModularPipeIssue[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, sourceTypeFinal])
+}
+
+model ModularPipeQualityLog {
+  id             String              @id @default(cuid())
+  documentId     String
+  document       ModularPipeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  organizationId String
+
+  qualityLogIdRaw   String?
+  date              String? // ISO YYYY-MM-DD once normalized; null if ambiguous (never guessed)
+  time              String? // ISO HH:MM (24h) once normalized
+  blockIdRaw        String?
+  blockIdNormalized String?
+  binIdsRawJson     String  @default("[]") // JSON array, raw as written
+  variety           String?
+  grade             String?
+  defectsJson       String  @default("[]") // JSON array of { defect_type, severity, count_or_percentage }
+  inspectorIdRaw    String?
+  comments          String?
+  linkedLoadIdRaw   String?
+
+  status    String   @default("invalid") // valid | valid_with_warnings | invalid
+  createdAt DateTime @default(now())
+
+  @@index([documentId])
+  @@index([organizationId, blockIdNormalized])
+}
+
+model ModularPipeBinOrigin {
+  id             String              @id @default(cuid())
+  documentId     String
+  document       ModularPipeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  organizationId String
+
+  binIdRaw                 String
+  binIdNormalized          String? // used for cross-document matching (spec Section 2.3.1)
+  harvestDate              String?
+  orchardIdRaw             String?
+  blockIdRaw               String?
+  variety                  String?
+  pickerGroupIdRaw         String?
+  pickerIdsRawJson         String  @default("[]")
+  loadIdRaw                String?
+  destinationSiteIdRaw     String?
+  specialHandlingFlagsJson String  @default("[]")
+
+  status    String   @default("invalid")
+  createdAt DateTime @default(now())
+
+  @@index([documentId])
+  @@index([organizationId, binIdNormalized])
+}
+
+model ModularPipeRseTimesheet {
+  id             String              @id @default(cuid())
+  documentId     String
+  document       ModularPipeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  organizationId String
+
+  timesheetIdRaw       String?
+  workerIdRaw          String?
+  workerNameRaw        String?
+  workerNameNormalized String?
+  resolvedCrewMemberId String? // set once fuzzy-matched/manually resolved against a real worker
+  date                 String?
+  shiftStartTime       String? // ISO HH:MM
+  shiftEndTime         String?
+  breaksJson           String  @default("[]") // JSON array of { break_start, break_end }
+  tasksJson            String  @default("[]") // JSON array of { task_type, block_id, start_time, end_time }
+  totalHoursReported   Float? // as read off the sheet, verbatim — never invented
+  totalHoursComputed   Float? // always recomputed in code from shift segments minus breaks (spec Section 2.3.2)
+  overtimeHours        Float?
+  payRate              Float? // null unless actually visible on the sheet — payroll safety (spec Section 3.3)
+  supervisorIdRaw      String?
+  approvalsJson        String  @default("[]")
+
+  status    String   @default("invalid")
+  createdAt DateTime @default(now())
+
+  @@index([documentId])
+  @@index([organizationId, workerIdRaw])
+}
+
+// errors[] from the pipeline contract (spec Section 2.4 / Step 5). Always
+// re-derived deterministically by lib/modularPipe/validate.ts for anything
+// business-critical (hours, cross-doc conflicts) — never taken on the model's
+// word alone, per the "no silent failures, no guessing" contract.
+model ModularPipeIssue {
+  id             String              @id @default(cuid())
+  documentId     String
+  document       ModularPipeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  recordType      String // quality_log | bin_origin | rse_timesheet | document
+  recordId        String?
+  code            String // e.g. missing_bin_origin, bin_conflict, hours_mismatch, ambiguous_date
+  severity        String // warning | error
+  message         String
+  field           String?
+  suggestedAction String?
+
+  resolved       Boolean   @default(false)
+  resolutionNote String?
+  resolvedById   String?
+  resolvedBy     User?     @relation("ModularPipeIssueResolvedBy", fields: [resolvedById], references: [id])
+  resolvedAt     DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([documentId])
+  @@index([organizationId, resolved, severity])
+  @@index([code])
 }

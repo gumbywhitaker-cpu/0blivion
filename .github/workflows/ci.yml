@@ -48,6 +48,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Modular AI Data Bridge — Zero Defect Testing Suite promotion gate
+        run: npm run test:modular-pipe
+
       - name: Build
         run: npm run build
 

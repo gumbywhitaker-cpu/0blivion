@@ -89,9 +89,24 @@ async function notifyMaterialOrderUpdate(ctx: ActionContext): Promise<void> {
   });
 }
 
+async function notifyModularPipeNeedsReview(ctx: ActionContext): Promise<void> {
+  if (ctx.event.type !== "MODULAR_PIPE_DOCUMENT_NEEDS_REVIEW") return;
+  const { sourceType, errorCount } = ctx.event.payload;
+  // Notification has no per-document deep link (see lib/notify.ts's fixed shape) —
+  // the God Mode queue itself is the resolution surface, so this points there rather
+  // than at one document.
+  await notifyOrgOwners({
+    organizationId: ctx.organizationId,
+    title: "Data Bridge document needs review",
+    body: `A ${sourceType} document couldn't be fully validated (${errorCount} error${errorCount === 1 ? "" : "s"}). Open the God Mode queue to resolve it.`,
+    urgency: "NORMAL",
+  });
+}
+
 export const ACTIONS: Record<string, ActionFn> = {
   createInvoiceDraft,
   notifyOwners,
   notifyCoolstoreAlert,
   notifyMaterialOrderUpdate,
+  notifyModularPipeNeedsReview,
 };

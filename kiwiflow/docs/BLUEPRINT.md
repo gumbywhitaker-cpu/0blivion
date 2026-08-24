@@ -522,3 +522,104 @@ off.
 Verified end-to-end via Playwright against a throwaway account (not the shared demo
 login): full setup, wrong-code rejection, correct-code login, backup-code login,
 backup-code single-use enforcement (a reused code is rejected), and clean disable.
+
+## 26. Modular AI Data Bridge — Packing House Pack (`lib/modularPipe/`)
+
+A three-stage pipeline (Ingestion -> Refinement -> Delivery) that turns messy packhouse
+paperwork — quality logs, bin origin records, RSE timesheets — into validated,
+analytics-ready records, plus a "God Mode" admin panel and a Zero Defect Testing
+Suite. This was requested as its own standalone spec, not part of the original
+brief's 25 sections above; it's numbered on to keep one blueprint document rather than
+starting a second one.
+
+**Where I pushed back on the spec, and why** (same instruction as Section 0: don't
+just agree):
+
+1. **"Modular by design, swap packs via admin config" ships as one pack, honestly.**
+   `ModularPipeConfig.activePack`/`ACTIVE_PACKS` (`lib/modularPipe/types.ts`) are
+   pack-agnostic by construction — a second pack would add its own domain-record
+   tables and a new prompt module, reusing `ModularPipeDocument`/`ModularPipeIssue`
+   and the pipeline shape — but no second pack (trucking, port logistics) is actually
+   implemented. The UI's pack dropdown says as much rather than presenting a fake
+   second option.
+
+2. **"Own ID" document splitting for mixed documents is deliberately not literal.**
+   The spec's Ingestion stage says a mixed document should be split into separate
+   sub-documents, each with its own ID. This build keeps one `ModularPipeDocument` row
+   per ingestion and lets each extracted record carry its own `record_type` and
+   independent validation/status instead — the meaningful behavior (each logical
+   section judged on its own terms) is preserved without a second document-identity
+   axis to keep in sync with the first.
+
+3. **Cross-tenant worker fuzzy-matching is not implemented — flagged, not faked.**
+   The spec's RSE timesheet validation calls for fuzzy-matching a name-only worker
+   against a master list. KiwiFlow's actual worker records (`CrewMember`) belong to
+   the CONTRACTOR org that employs an RSE crew, not the PACKHOUSE org running this
+   pipe — tenant isolation (Section 3) means there's no worker master data a
+   packhouse can honestly match against. `worker_unresolved` always requires manual
+   resolution instead of pretending a match was attempted.
+
+4. **`unknown_block` is not implemented.** It requires a block master data table.
+   `Orchard` doesn't enumerate blocks separately in this schema, so rather than fake
+   a check against data that doesn't exist, only `missing_bin_origin` and
+   `bin_conflict` (spec Section 2.3.1) are implemented.
+
+5. **Images are never persisted**, matching the existing AI grading estimate's policy
+   (`lib/aiGrading.ts`): a photo is sent to the classification call and discarded, not
+   stored. `ModularPipeDocument.imageNote` records that a photo existed and wasn't
+   kept; `rawText` is the only original-content column, populated for pasted/typed
+   text or the model's own OCR transcription.
+
+6. **Only two ingestion channels are wired: `upload` (image) and `text_blob`/
+   `manual_entry` (paste).** Email and API ingestion are named in the spec as future
+   channels and are represented in the type system (`INGESTION_CHANNELS`) but have no
+   actual inbox or endpoint behind them here.
+
+7. **PDF/spreadsheet OCR is not implemented.** The only vision path is the same
+   image-to-Claude call `lib/aiGrading.ts` already uses. A PDF or XLSX has to be
+   pasted as text; the ingest form says this explicitly rather than silently failing
+   on an unsupported file type.
+
+**Architecture, in one sentence**: the model (`lib/modularPipe/classify.ts`) is
+trusted to extract fields and propose its own errors, but every business-critical
+number — hours, cross-record conflicts, mandatory-field completeness — is
+recomputed deterministically in `lib/modularPipe/validate.ts` (pure, no DB, no
+`server-only`) and `lib/modularPipe/crossDocCheck.ts` (DB-backed), and the model's
+opinion never overrides that. This is the same "AI can only act through code the app
+controls" posture Section 13 describes for the (still deferred) general AI layer,
+applied here to a feature that actually ships. `lib/modularPipe/pipeline.ts`
+orchestrates: create the document row, call `classify.ts`, persist each extracted
+record, run the deterministic validators, persist issues, assign status
+(`valid`/`valid_with_warnings`/`invalid`), and — on `invalid` — emit
+`MODULAR_PIPE_DOCUMENT_NEEDS_REVIEW` through the Conductor (same synchronous MVP
+posture as every other event, Section 1), which notifies the org's owners via the
+existing global `WorkflowRule` (`prisma/globalWorkflowRules.json`).
+
+**Fails closed, same as the AI grading estimate and daily briefing**: with no
+`ANTHROPIC_API_KEY` configured, `classify.ts` returns a clear "not configured" reason
+instead of throwing; the pipeline still runs, persists a document, and surfaces one
+`extraction_failed` issue — verified by `tests/modular-pipe.spec.ts`, which runs
+against this exact unconfigured state.
+
+**God Mode** (`app/(app)/packhouse/modular-pipe/`) is org-scoped, not a
+platform-cross-org surface like `/admin` (Section 23) — each PACKHOUSE org configures
+and reviews only its own Data Bridge instance, consistent with the tenant model
+everywhere else in this app. Settings (`ModularPipeConfig`) are sliders/dropdowns/
+checkboxes only, never free text, matching the spec's Section 4.2 requirement; the
+exception queue (`/queue`) is one filterable table standing in for the spec's three
+named queues (unclassified/needs_review/conflicts), since "has an open issue" already
+covers all three; the document detail page (`/documents/[id]`) is the spec's
+side-by-side view (original text, extracted fields, issues, resolve-with-note).
+
+**Delivery** (spec Section 3): JSON APIs for all four entities plus CSV exports exist
+under `/api/v1/modular-pipe/*` and `/api/v1/export/modular-pipe-*.csv`, each stamped
+with `source_pack`/`pack_version`/`schema_version` per record.
+
+**Zero Defect Testing Suite** (`lib/modularPipe/goldset/`, spec Section 5): 14 gold +
+stress cases exercise `validate.ts`'s pure functions directly — no DB, no live model
+call — runnable via `npm run test:modular-pipe`, which exits non-zero when the
+promotion gate (>5% hard-fail rate, or any `criticalPayroll`-marked case failing)
+isn't met. This is a real, honest gap worth stating plainly: it verifies the
+deterministic validator, not the model's extraction accuracy on real messy
+documents — a live-classification accuracy suite needs a configured API key and
+curated real-world fixtures, and is legitimate future work, not built here.

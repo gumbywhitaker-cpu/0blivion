@@ -46,6 +46,7 @@ function navForSession(orgType: string, role: string): { href: string; label: st
   if (orgType === "PACKHOUSE") {
     return [
       { href: "/packhouse", label: "Incoming" },
+      { href: "/packhouse/modular-pipe", label: "Data Bridge" },
       { href: "/export", label: "Export" },
       { href: "/coolstore", label: "Coolstore" },
       ...common,

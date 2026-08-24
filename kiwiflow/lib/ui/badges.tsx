@@ -158,3 +158,33 @@ export function ExportShipmentStatusBadge({ status }: { status: string }) {
     </span>
   );
 }
+
+const MODULAR_PIPE_DOCUMENT_STATUS_STYLE: Record<string, string> = {
+  valid: "bg-kf-green-100 text-kf-green-700",
+  valid_with_warnings: "bg-kf-gold/20 text-kf-gold",
+  invalid: "bg-kf-red/10 text-kf-red",
+  unclassified: "bg-zinc-100 text-zinc-600",
+};
+
+export function ModularPipeStatusBadge({ status }: { status: string }) {
+  const style = MODULAR_PIPE_DOCUMENT_STATUS_STYLE[status] ?? "bg-zinc-100 text-zinc-700";
+  return (
+    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${style}`}>
+      {status.replace(/_/g, " ")}
+    </span>
+  );
+}
+
+const MODULAR_PIPE_ISSUE_SEVERITY_STYLE: Record<string, string> = {
+  error: "bg-kf-red/10 text-kf-red",
+  warning: "bg-kf-gold/20 text-kf-gold",
+};
+
+export function ModularPipeIssueSeverityBadge({ severity }: { severity: string }) {
+  const style = MODULAR_PIPE_ISSUE_SEVERITY_STYLE[severity] ?? "bg-zinc-100 text-zinc-700";
+  return (
+    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${style}`}>
+      {severity}
+    </span>
+  );
+}
