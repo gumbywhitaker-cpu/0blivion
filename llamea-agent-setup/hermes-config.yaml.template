@@ -1,0 +1,58 @@
+# Hermes Agent config.yaml — hermes3 (conductor) + qwen3:30b (heavy lifter)
+#
+# Generated from this template by wsl-setup.sh, which substitutes
+# ${OLLAMA_BASE_URL} with the URL WSL2 uses to reach Ollama on the Windows
+# host (see README.md). Do not hand-edit the substituted values back into
+# this template file — edit ~/.hermes/config.yaml directly after install.
+
+providers:
+  ollama:
+    api: ${OLLAMA_BASE_URL}
+    api_key: ""
+    models:
+      - hermes3:latest
+      - qwen3:30b
+
+# The conductor: default model for the main agent loop (tool calls,
+# conversation, orchestration).
+model:
+  provider: ollama
+  default: hermes3:latest
+  base_url: ${OLLAMA_BASE_URL}
+  context_length: 64000
+
+# Auxiliary (side-task) routing. Most auxiliary tasks stay on the conductor
+# via provider: auto. Only the tasks that are actually reasoning-heavy are
+# routed to the heavy lifter.
+auxiliary:
+  vision:
+    provider: auto
+  compression:
+    provider: ollama
+    model: qwen3:30b
+  title_generation:
+    provider: auto
+  approval:
+    provider: auto
+  web_extract:
+    provider: auto
+  skills_hub:
+    provider: auto
+  mcp:
+    provider: auto
+  triage_specifier:
+    provider: ollama
+    model: qwen3:30b
+  kanban_decomposer:
+    provider: ollama
+    model: qwen3:30b
+  profile_describer:
+    provider: auto
+  curator:
+    provider: auto
+
+# If the conductor's endpoint fails mid-session, fall back to the heavy
+# lifter rather than failing the turn outright.
+fallback_providers:
+  - provider: ollama
+    model: qwen3:30b
