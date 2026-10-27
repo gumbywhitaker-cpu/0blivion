@@ -1,0 +1,539 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --bg-void: #08090b;
+  --bg-panel: #101216;
+  --bg-panel-2: #16191e;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --text-primary: #f4f4f2;
+  --text-secondary: #9a9ea6;
+  --text-tertiary: #5c6169;
+  --safety-orange: #ff5a1f;
+  --safety-orange-bright: #ff7a3d;
+  --safety-orange-dim: rgba(255, 90, 31, 0.16);
+  --font-display: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg-void);
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+#root {
+  position: relative;
+}
+
+a {
+  color: inherit;
+}
+
+::selection {
+  background: var(--safety-orange);
+  color: #10110f;
+}
+
+.canvas-stage {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+  background: radial-gradient(120% 100% at 50% 20%, #14161a 0%, #0a0b0d 70%, #060708 100%);
+}
+
+.canvas-stage canvas {
+  position: absolute;
+  inset: 0;
+  outline: none;
+}
+
+.scroll-track {
+  position: relative;
+  width: 100%;
+}
+
+.hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.hud > * {
+  pointer-events: none;
+}
+
+/* Only the elements that actually carry click targets should intercept the
+   pointer -- everything else here is decorative text sitting in a
+   full-viewport wrapper, and must stay click-through so hover/click reaches
+   the 3D scene underneath. */
+.hud .progress-rail,
+.hud .stage-nav {
+  pointer-events: auto;
+}
+
+/* ---------- brand mark ---------- */
+.brandmark {
+  position: absolute;
+  top: clamp(20px, 3vw, 36px);
+  left: clamp(20px, 3vw, 36px);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.brandmark .mark {
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+.brandmark .mark span {
+  color: var(--safety-orange);
+}
+
+.brandmark .sub {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+}
+
+/* ---------- hero copy ---------- */
+.hero-copy {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding-bottom: 9vh;
+  text-align: center;
+}
+
+.hero-copy .eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
+  color: var(--safety-orange-bright);
+  margin-bottom: 18px;
+}
+
+.hero-copy h1 {
+  font-size: clamp(2.1rem, 5vw, 4.4rem);
+  line-height: 1.02;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  max-width: 18ch;
+  margin: 0 0 18px;
+  background: linear-gradient(180deg, #ffffff 0%, #c7c9cd 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.hero-copy p {
+  max-width: 46ch;
+  font-size: clamp(0.95rem, 1.3vw, 1.15rem);
+  line-height: 1.55;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.scroll-cue {
+  position: absolute;
+  bottom: clamp(18px, 3vw, 32px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.scroll-cue .stem {
+  width: 1px;
+  height: 34px;
+  background: linear-gradient(180deg, var(--safety-orange) 0%, transparent 100%);
+  animation: scrollcue 1.8s ease-in-out infinite;
+}
+
+@keyframes scrollcue {
+  0% {
+    transform: scaleY(0.2);
+    opacity: 0.2;
+    transform-origin: top;
+  }
+  50% {
+    transform: scaleY(1);
+    opacity: 1;
+    transform-origin: top;
+  }
+  100% {
+    transform: scaleY(0.2);
+    opacity: 0.2;
+    transform-origin: bottom;
+  }
+}
+
+/* ---------- sticky label (post-hero) ---------- */
+.sticky-label {
+  position: absolute;
+  top: clamp(20px, 3vw, 36px);
+  right: clamp(20px, 3vw, 36px);
+  text-align: right;
+  opacity: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.sticky-label b {
+  color: var(--safety-orange-bright);
+  font-weight: 500;
+}
+
+/* ---------- progress rail ---------- */
+.progress-rail {
+  position: absolute;
+  right: clamp(20px, 3vw, 36px);
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 14px;
+  opacity: 0;
+}
+
+.progress-rail .dot-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.progress-rail .dot-label {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  transition: color 0.3s ease;
+  white-space: nowrap;
+}
+
+.progress-rail .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+  transition: all 0.3s ease;
+}
+
+.progress-rail .dot-row.active .dot-label {
+  color: var(--text-primary);
+}
+
+.progress-rail .dot-row.active .dot {
+  background: var(--safety-orange);
+  box-shadow: 0 0 10px var(--safety-orange);
+  transform: scale(1.6);
+}
+
+.progress-rail .dot-row:hover .dot-label {
+  color: var(--safety-orange-bright);
+}
+
+/* ---------- callout card ---------- */
+.callout {
+  position: absolute;
+  left: clamp(20px, 4vw, 64px);
+  top: 50%;
+  transform: translateY(-50%);
+  width: min(380px, 88vw);
+  padding: 26px 26px 24px;
+  background: linear-gradient(180deg, rgba(16, 18, 22, 0.92) 0%, rgba(10, 11, 13, 0.92) 100%);
+  border: 1px solid var(--border-subtle);
+  border-left: 2px solid var(--safety-orange);
+  border-radius: 4px;
+  backdrop-filter: blur(14px);
+  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.6);
+  opacity: 0;
+}
+
+.callout .callout-index {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.24em;
+  color: var(--safety-orange-bright);
+  text-transform: uppercase;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.callout .callout-index .icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+.callout h3 {
+  font-size: clamp(1.4rem, 2vw, 1.85rem);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  margin: 0 0 4px;
+}
+
+.callout .tagline {
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+  margin: 0 0 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.callout p.desc {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  margin: 0 0 20px;
+}
+
+.callout .params {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 16px;
+}
+
+.callout .param-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12.5px;
+}
+
+.callout .param-label {
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+}
+
+.callout .param-value {
+  color: var(--text-primary);
+  font-weight: 600;
+  text-align: right;
+}
+
+.callout .param-value .note {
+  display: block;
+  font-weight: 400;
+  font-size: 9.5px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-top: 1px;
+}
+
+/* ---------- stage nav (always-available quick access) ---------- */
+.stage-nav {
+  position: absolute;
+  left: clamp(20px, 3vw, 36px);
+  bottom: clamp(24px, 4vw, 44px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  opacity: 0;
+}
+
+.stage-nav button {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  padding: 3px 0;
+  transition: color 0.25s ease;
+}
+
+.stage-nav button .num {
+  width: 18px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.stage-nav button.active {
+  color: var(--text-primary);
+}
+
+.stage-nav button.active .num {
+  color: var(--safety-orange);
+}
+
+.stage-nav button:hover {
+  color: var(--safety-orange-bright);
+}
+
+/* ---------- outro ---------- */
+.outro {
+  position: relative;
+  min-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 10vh 24px;
+  background: linear-gradient(180deg, #08090b 0%, #0c0d10 100%);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.outro .eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
+  color: var(--safety-orange-bright);
+  margin-bottom: 20px;
+}
+
+.outro h2 {
+  font-size: clamp(1.9rem, 4vw, 3.2rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  max-width: 20ch;
+  margin: 0 0 22px;
+}
+
+.outro p {
+  max-width: 52ch;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  font-size: 1.02rem;
+  margin: 0 0 36px;
+}
+
+.outro .stat-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: clamp(24px, 5vw, 64px);
+  margin-bottom: 40px;
+}
+
+.outro .stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.outro .stat .num {
+  font-size: clamp(1.8rem, 3vw, 2.6rem);
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.outro .stat .num span {
+  color: var(--safety-orange);
+}
+
+.outro .stat .label {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.outro .cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 15px 30px;
+  background: var(--safety-orange);
+  color: #14110c;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+  border-radius: 3px;
+  text-decoration: none;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  box-shadow: 0 16px 40px -14px rgba(255, 90, 31, 0.55);
+}
+
+.outro .cta:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 22px 50px -14px rgba(255, 90, 31, 0.7);
+}
+
+.outro .fineprint {
+  margin-top: 22px;
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+}
+
+@media (max-width: 760px) {
+  .progress-rail,
+  .stage-nav {
+    display: none;
+  }
+
+  .callout {
+    /* centered via left/right + margin, not transform: translate(-50%, 0) --
+       CalloutPanel's GSAP slide-in animates transform on this element
+       directly (inline style), which would silently override a
+       transform-based centering trick and push the card off-screen. */
+    left: 4vw;
+    right: 4vw;
+    top: auto;
+    bottom: 18px;
+    width: auto;
+    padding: 20px 20px 18px;
+  }
+
+  .brandmark {
+    top: 16px;
+    left: 16px;
+  }
+
+  /* the brandmark already persists in the top-left throughout the scroll;
+     on narrow screens there isn't room for this too without the two
+     colliding, so drop the redundant one rather than truncating either. */
+  .sticky-label {
+    display: none;
+  }
+}
